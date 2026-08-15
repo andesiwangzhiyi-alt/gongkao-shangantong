@@ -1,0 +1,14 @@
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# 测试产物
+test_shots/
+__pycache__/
+*.pyc

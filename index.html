@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>上岸通 · 考公学习神器</title>
+<meta name="description" content="上岸通 — 公务员考试一站式学习工具：行测刷题、每日一练、模拟考试、错题本、申论素材、打卡追踪、番茄钟。纯前端离线可用，数据本地存储。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231c3f60'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle' fill='%23e8b64c'%3E%E4%B8%8A%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <!-- 顶部栏 -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">上</span>
+      <span class="brand-name">上岸通<em>考公学习神器</em></span>
+    </div>
+    <div class="top-actions">
+      <span id="streakBadge" class="streak-badge" title="连续打卡天数">🔥 <b>0</b>天</span>
+    </div>
+  </header>
+
+  <!-- 主视图 -->
+  <main id="view" class="view"></main>
+
+  <!-- 底部导航 -->
+  <nav class="tabbar">
+    <button class="tab active" data-view="dashboard"><span class="tab-ico">🏠</span>首页</button>
+    <button class="tab" data-view="practice"><span class="tab-ico">📝</span>刷题</button>
+    <button class="tab" data-view="daily"><span class="tab-ico">📅</span>每日一练</button>
+    <button class="tab" data-view="exam"><span class="tab-ico">⏱️</span>模考</button>
+    <button class="tab" data-view="wrongbook"><span class="tab-ico">❌</span>错题本</button>
+    <button class="tab" data-view="shenlun"><span class="tab-ico">📖</span>申论</button>
+    <button class="tab" data-view="more"><span class="tab-ico">☰</span>更多</button>
+  </nav>
+</div>
+
+<!-- 答题弹层 -->
+<div id="quizLayer" class="quiz-layer hidden">
+  <div class="quiz-head">
+    <div class="quiz-title" id="quizTitle">刷题</div>
+    <div class="quiz-meta">
+      <span id="quizProgress">1/10</span>
+      <span id="quizTimer" class="timer-chip">00:00</span>
+      <button id="quizClose" class="icon-btn" title="退出">✕</button>
+    </div>
+  </div>
+  <div class="quiz-body" id="quizBody"></div>
+  <div class="quiz-foot" id="quizFoot">
+    <button class="btn" id="footPrev" onclick="prevQ()">上一题</button>
+    <button class="btn" id="footMark" onclick="markQ()">⚑ 标记</button>
+    <button class="btn primary" id="footNext" onclick="nextQ()">下一题</button>
+  </div>
+</div>
+
+<!-- 结果弹层 -->
+<div id="resultLayer" class="quiz-layer hidden">
+  <div class="result-box" id="resultBox"></div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/questions.js"></script>
+<script src="js/questions2.js"></script>
+<script src="js/questions3.js"></script>
+<script src="js/shenlun.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
