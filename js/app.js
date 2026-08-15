@@ -324,6 +324,28 @@ function renderMore(){
     <div class="list-row"><div><div class="l-title">艾宾浩斯复习提醒</div><div class="l-sub">错题按 1/2/4/7/15 天提醒复习，今日 ${due.length} 题</div></div>
     <div class="switch ${store.settings.reviewOn?'on':''}" onclick="toggleReview()"></div></div>
   </div>
+  <div class="card"><h3><span class="dot"></span>📄 真题资源库（全网精选）</h3>
+    <div class="muted mb10">以下为全网公开的历年真题与题库资源，点开即可使用：</div>
+    <div class="sl-item"><div class="sl-title"><span>🏛️ 历年省考行测真题 PDF（2003-2025）</span></div>
+      <div class="sl-body">全网最全省考真题库：30+ 省市历年《行测》真题+答案解析 PDF（1.1GB，持续更新），含联考/选调/深圳市考等。
+      获取：github.com/SGHCN0762/civil-provice-exam-xingce → 下载 ZIP 或按需下载单个 PDF 打印刷题。</div>
+      <div class="btn-row"><button class="btn small primary" onclick="openUrl('https://github.com/SGHCN0762/civil-provice-exam-xingce')">打开仓库</button></div>
+    </div>
+    <div class="sl-item"><div class="sl-title"><span>📱 粉笔真题在线刷（含 2026 国考最新）</span></div>
+      <div class="sl-body">粉笔官网真题页免登录可看：国考 36 套（2026 行政执法/地市级/副省级最新）+ 30 省市真题 + 国考/省考模拟题，在线作答。登录粉笔账号可解锁解析与更多功能。</div>
+      <div class="btn-row"><button class="btn small primary" onclick="openUrl('https://www.fenbi.com/spa/tiku/guide/realTest/xingce/xingce')">打开粉笔真题</button>
+      <button class="btn small" onclick="openUrl('https://www.fenbi.com/spa/tiku/guide/mock/xingce/xingce')">粉笔模考</button></div>
+    </div>
+    <div class="sl-item"><div class="sl-title"><span>📚 申论/综应题库（3853+1035 题）</span></div>
+      <div class="sl-body">结构化申论题库（公文写作/概括/对策/文章写作等）+ 事业单位综应题库，含题干、参考答案、答题演示、考点解析。
+      获取：github.com/2421873411a-rgb/gongkao-tiku</div>
+      <div class="btn-row"><button class="btn small primary" onclick="openUrl('https://github.com/2421873411a-rgb/gongkao-tiku')">打开仓库</button></div>
+    </div>
+    <div class="sl-item"><div class="sl-title"><span>🤖 粉笔历年真题批量下载（爬虫）</span></div>
+      <div class="sl-body">开源爬虫，填入粉笔账号密码即可批量下载粉笔历年真题（含国考/省考 PDF）。需要粉笔账号，账号密码仅用于本机登录。</div>
+      <div class="btn-row"><button class="btn small primary" onclick="openUrl('https://github.com/dduutt/fenbi')">打开项目</button></div>
+    </div>
+  </div>
   <div class="card"><h3><span class="dot"></span>数据管理</h3>
     <div class="btn-row">
       <button class="btn" onclick="exportData()">📤 导出备份</button>
@@ -548,6 +570,7 @@ window.toggleFav=toggleFav; window.addCustomSl=addCustomSl; window.delCustomSl=d
 window.renderWrongByMod=renderWrongByMod; window.renderExamConfig=renderExamConfig;
 window.renderExamCustom=renderExamCustom; window.examCustom=examCustom; window.examQuick=examQuick;
 window.exportData=exportData; window.importData=importData; window.confirmReset=confirmReset;
+window.openUrl=(u)=>{ window.open(u,'_blank'); };
 window.toggleReview=toggleReview; window.pomoToggle=pomoToggle; window.pomoReset=pomoReset;
 window.reviewQuiz=reviewQuiz; window.reviewNav=reviewNav; window.closeResult=closeResult;
 pomoRender();
