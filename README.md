@@ -36,7 +36,11 @@ python -m http.server 8080
 # 然后访问 http://localhost:8080
 ```
 
-### 方式三：部署到 GitHub Pages
+### 方式三：在线使用（GitHub Pages）
+应用已部署在线版，无需下载直接访问：
+**https://andesiwangzhiyi-alt.github.io/gongkao-shangantong/**
+
+### 方式四：部署到自己的 GitHub Pages
 把仓库 fork 后，在仓库 Settings → Pages 中选择 `main` 分支即可在线访问。
 
 ## 📁 目录结构
