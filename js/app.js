@@ -331,7 +331,143 @@ function printFiltered(){
   w.document.close();
 }
 
-/* ---------- 智能组卷（薄弱点强化） ---------- */
+/* ---------- 卷种配置（组卷依据：2025-2026 新大纲 + 各省结构） ---------- */
+const PAPER_CONFIGS = {
+  '国考·副省级': {total:135, time:120, mods:{政治理论:20,常识判断:15,言语理解:30,数量关系:15,判断推理:35,资料分析:20}},
+  '国考·地市级': {total:130, time:120, mods:{政治理论:20,常识判断:15,言语理解:30,数量关系:10,判断推理:35,资料分析:20}},
+  '国考·行政执法': {total:130, time:120, mods:{政治理论:20,常识判断:15,言语理解:30,数量关系:10,判断推理:35,资料分析:20}},
+  '国考·旧大纲(2024前)': {total:130, time:120, mods:{常识判断:20,言语理解:40,数量关系:10,判断推理:40,资料分析:20}},
+  '省考联考': {total:120, time:120, mods:{常识判断:20,言语理解:40,数量关系:10,判断推理:35,资料分析:15}},
+  '省考联考(2025新大纲)': {total:120, time:120, mods:{政治理论:5,常识判断:15,言语理解:40,数量关系:10,判断推理:35,资料分析:15}},
+  '江苏A类': {total:135, time:120, mods:{常识判断:15,言语理解:45,数量关系:20,判断推理:45,资料分析:10}},
+  '浙江': {total:120, time:120, mods:{常识判断:20,言语理解:40,数量关系:15,判断推理:35,资料分析:10}},
+  '北京': {total:135, time:120, mods:{常识判断:35,言语理解:35,数量关系:20,判断推理:30,资料分析:15}},
+  '广东': {total:100, time:90, mods:{常识判断:15,言语理解:15,数量关系:15,判断推理:35,资料分析:20}},
+  '上海': {total:130, time:120, mods:{常识判断:25,言语理解:25,数量关系:15,判断推理:35,资料分析:30}},
+};
+const MOD_ORDER = ['政治理论','常识判断','言语理解','数量关系','判断推理','资料分析'];
+
+/* ---------- 自定义组卷 ---------- */
+let __paperCfg = null;
+function renderCustomQuiz(){
+  $('#view').innerHTML=`
+  <div class="card"><h3><span class="dot"></span>🎯 自定义组卷</h3>
+    <div class="muted mb10">按各地国省考卷种结构智能组卷（上岸通特色）——可选完整模考卷或小卷子，在线答题或导出打印</div>
+    <div class="field"><label>卷种模板（自动填充各模块题量，可改）</label>
+      <select id="pcType" onchange="applyPaperCfg()">
+        ${Object.keys(PAPER_CONFIGS).map(k=>`<option value="${k}">${k}（${PAPER_CONFIGS[k].total}题/${PAPER_CONFIGS[k].time}分钟）</option>`).join('')}
+        <option value="custom">自定义（手动填写）</option>
+      </select></div>
+    <div class="field"><label>题目范围</label>
+      <select id="pcScope"><option value="all">全部题库（含解析）</option><option value="真题">仅真题（国考/省考）</option><option value="模考">仅模考题</option></select></div>
+    <div id="pcMods"></div>
+    <div class="btn-row">
+      <button class="btn primary" onclick="buildPaper()">📝 生成试卷</button>
+      <button class="btn gold" onclick="buildPaperAndPrint()">🖨 生成并导出 PDF</button>
+    </div>
+    <div class="muted mt8">题库池：政治理论 ${(QUESTION_BANK['政治理论']||[]).length} · 常识 ${(QUESTION_BANK['常识判断']||[]).length} · 言语 ${(QUESTION_BANK['言语理解']||[]).length} · 数量 ${(QUESTION_BANK['数量关系']||[]).length} · 判断 ${(QUESTION_BANK['判断推理']||[]).length} · 资料 ${(QUESTION_BANK['资料分析']||[]).length}</div>
+  </div>`;
+  applyPaperCfg();
+}
+function applyPaperCfg(){
+  const t=$('#pcType').value;
+  const cfg=PAPER_CONFIGS[t]||{mods:{常识判断:20,言语理解:30,数量关系:10,判断推理:30,资料分析:10}};
+  $('#pcMods').innerHTML=MOD_ORDER.filter(m=>cfg.mods[m]).map(m=>`
+    <div class="pc-row"><span>${MOD_ICO[m]} ${m}</span>
+      <input type="number" class="pc-num" data-mod="${m}" value="${cfg.mods[m]}" min="0" max="100" onchange="pcTotal()">
+      <span class="muted">题</span></div>`).join('')
+    + `<div class="pc-total mt8"><b>合计：<span id="pcTotalNum">${MOD_ORDER.reduce((s,m)=>s+(cfg.mods[m]||0),0)}</span> 题</b> <span class="muted">（小于卷种题量即小卷子）</span></div>`;
+}
+function pcTotal(){
+  let t=0;
+  document.querySelectorAll('.pc-num').forEach(i=>t+=+i.value||0);
+  $('#pcTotalNum').textContent=t;
+}
+function buildPaper(){
+  const qs=paperQuestions();
+  if(!qs.length){ toast('所选范围内题目不足，换个范围'); return; }
+  __paperCfg={list:qs, time:120};
+  startQuiz(qs, '🎯 自定义卷 · '+qs.length+'题（'+timeStr(120)+'）');
+}
+function buildPaperAndPrint(){
+  const qs=paperQuestions();
+  if(!qs.length){ toast('所选范围内题目不足'); return; }
+  printPaper(qs);
+}
+function paperQuestions(){
+  const scope=$('#pcScope')?.value||'all';
+  const out=[];
+  document.querySelectorAll('.pc-num').forEach(inp=>{
+    const mod=inp.dataset.mod; const n=+inp.value||0;
+    if(n<=0) return;
+    let pool=QUESTION_BANK[mod]||[];
+    if(scope==='真题') pool=pool.filter(q=>{const s=qSource(q);return s.includes('国考')||s.includes('省考');});
+    if(scope==='模考') pool=pool.filter(q=>qSource(q).includes('模考'));
+    out.push(...shuffle(pool).slice(0,n));
+  });
+  return out;
+}
+function timeStr(sec){ return Math.floor(sec/60)+'分'+(sec%60?sec%60+'秒':''); }
+
+/* ---------- 真题卷格式 PDF 导出 ---------- */
+function printPaper(qs){
+  const w=window.open('','_blank');
+  const cfgName=$('#pcType')?.value||'模拟卷';
+  const now=new Date();
+  const dateStr=`${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${cfgName}模拟卷</title>
+  <style>
+  @page{size:A4;margin:18mm 16mm}
+  body{font-family:SimSun,'Songti SC','Microsoft YaHei',serif;color:#000;font-size:12px;line-height:1.7}
+  .head{text-align:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:14px}
+  .head h1{font-size:18px;letter-spacing:2px;margin-bottom:2px}
+  .head .sub{font-size:12px}
+  .notice{border:1.5px solid #000;padding:8px 12px;margin-bottom:14px;font-size:11px}
+  .notice b{display:block;text-align:center;margin-bottom:4px;font-size:12px}
+  .part{font-weight:700;font-size:14px;margin:16px 0 8px;padding:4px 10px;background:#f2f4f7;border-left:4px solid #000}
+  .q{margin-bottom:14px;page-break-inside:avoid}
+  .q .no{font-weight:700}
+  .q .stem{display:inline;margin-left:4px}
+  .q .opts{margin:3px 0 3px 22px}
+  .q .opts div{margin:1px 0}
+  .material{background:#f8f9fa;border:1px dashed #999;padding:8px 10px;margin-bottom:10px;font-size:11.5px;white-space:pre-wrap}
+  .ans-page{page-break-before:always}
+  .ans-table{width:100%;border-collapse:collapse;margin-top:8px}
+  .ans-table td,.ans-table th{border:1px solid #000;padding:4px;text-align:center;font-size:11px}
+  .ans-table .ahead{background:#f2f4f7;font-weight:700}
+  .foot{text-align:center;color:#666;margin-top:20px;font-size:10px}
+  </style></head><body>
+  <div class="head">
+    <h1>${cfgName}·全真模拟卷</h1>
+    <div class="sub">《行政职业能力测验》 · 作答时限 120 分钟 · 满分 100 分</div>
+    <div class="sub">上岸通 智能组卷 · ${dateStr} · 共 ${qs.length} 题</div>
+  </div>
+  <div class="notice"><b>注意事项</b>
+  1. 本试卷为行测模拟题，请用 2B 铅笔在答题卡上作答，在题本上作答一律无效。<br>
+  2. 监考人员宣布考试开始时，方可开始答题。<br>
+  3. 监考人员宣布考试结束时，应立即停止答题，将题本、答题卡翻放桌上。<br>
+  4. 答题前请认真阅读答题卡上的注意事项，按规定填涂姓名与准考证号。
+  </div>
+  ${MOD_ORDER.filter(m=>qs.some(q=>q.mod===m)).map(m=>{
+    const part=qs.filter(q=>q.mod===m);
+    return `<div class="part">${MOD_ICO[m]} ${m}（${part.length} 题）</div>`+part.map((q,i)=>{
+      const no=qs.indexOf(q)+1;
+      // 材料（若题干含材料分隔）
+      const hasMat=q.stem.includes('\n\n');
+      const stem=hasMat? q.stem.split('\n\n').slice(1).join('\n\n') : q.stem;
+      const mat=hasMat? q.stem.split('\n\n')[0] : '';
+      return (mat?`<div class="material">${esc(mat)}</div>`:'')+
+        `<div class="q"><span class="no">${no}.</span><div class="stem">${esc(stem).replace(/\[图(\d+)\]/g,'（图）')}</div>
+        <div class="opts">${q.options.map((o,j)=>`<div>${'ABCD'[j]}. ${esc(o)}</div>`).join('')}</div></div>`;
+    }).join('');
+  }).join('')}
+  <div class="ans-page"><div class="part">📋 参考答案与解析（${qs.length} 题）</div>
+  ${qs.map((q,i)=>`<div class="q"><b>${i+1}. ${q.mod} · ${q.type}</b> 答案：<b>${q.multi?q.answer:('ABCD'[q.answer])}</b>${qRate(q)?`（正确率 ${qRate(q)}%）`:''}${qPoints(q)?` · 考点：${esc(qPoints(q))}`:''}<div class="material" style="border:none;background:transparent;padding:4px 0 0">${esc(q.analysis)}</div></div>`).join('')}
+  <div class="foot">本卷由上岸通智能生成，仅供学习使用 · 解析版权归原题库方所有</div></div>
+  <script>window.onload=function(){setTimeout(()=>window.print(),500)}</script>
+  </body></html>`);
+  w.document.close();
+}
 function smartQuiz(){
   // 按错题考点 + 模块正确率生成薄弱点练习
   const wrong=Object.keys(store.wrongs).map(id=>allQuestions().find(q=>q.id===id)).filter(Boolean);
@@ -398,6 +534,9 @@ function renderExamConfig(){
       <div class="ec" onclick="examQuick(35)"><b>35题</b><span>35分钟 · 半套</span></div>
       <div class="ec" onclick="examQuick(50)"><b>50题</b><span>50分钟 · 标准套</span></div>
       <div class="ec" onclick="renderExamCustom()"><b>自定义</b><span>自选题量/时间</span></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn gold" onclick="renderCustomQuiz()">🎯 卷种定制组卷（上岸通特色）</button>
     </div>
   </div>
   <div class="card"><h3><span class="dot"></span>模考技巧</h3><div class="muted">
@@ -826,6 +965,8 @@ window.renderShenlun=renderShenlun; window.renderShenlunSearch=renderShenlunSear
 window.toggleFav=toggleFav; window.addCustomSl=addCustomSl; window.delCustomSl=delCustomSl;
 window.renderWrongByMod=renderWrongByMod; window.renderExamConfig=renderExamConfig;
 window.renderExamCustom=renderExamCustom; window.examCustom=examCustom; window.examQuick=examQuick;
+window.renderCustomQuiz=renderCustomQuiz; window.applyPaperCfg=applyPaperCfg; window.pcTotal=pcTotal;
+window.buildPaper=buildPaper; window.buildPaperAndPrint=buildPaperAndPrint; window.smartQuiz=smartQuiz;
 window.exportData=exportData; window.importData=importData; window.confirmReset=confirmReset;
 window.openUrl=(u)=>{ window.open(u,'_blank'); };
 window.toggleReview=toggleReview; window.pomoToggle=pomoToggle; window.pomoReset=pomoReset;

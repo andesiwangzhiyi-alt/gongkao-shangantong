@@ -96,6 +96,11 @@ input,textarea,select{font-family:inherit;font-size:14px}
 .sr-no{font-size:12px;color:var(--navy-2);font-weight:700;flex-shrink:0}
 .sr-stem{flex:1;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sr-item .tag{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:8px;margin-left:4px;flex-shrink:0}
+.pc-row{display:flex;align-items:center;gap:10px;padding:7px 2px;border-bottom:1px solid #f0f2f7}
+.pc-row span:first-child{flex:1;font-size:13.5px;font-weight:500}
+.pc-num{width:70px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;text-align:center;background:var(--card)}
+.pc-num:focus{outline:none;border-color:var(--navy-2)}
+.pc-total{font-size:14px;color:var(--navy)}
 .q-opt.wrong .ol{background:var(--red);color:#fff}
 .q-opt.disabled{pointer-events:none}
 .q-opt .mark{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:18px}
