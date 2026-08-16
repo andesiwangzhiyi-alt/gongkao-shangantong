@@ -39,8 +39,8 @@ function optImgsHtml(q, i){
   return q.opt_images[i].map(u=>`<img class="q-img opt-img" src="${u}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`).join('');
 }
 const MODS = Object.keys(QUESTION_BANK);
-const MOD_ICO = {'常识判断':'🧠','言语理解':'🗣️','数量关系':'🔢','判断推理':'🧩','资料分析':'📊'};
-const MOD_COLOR = {'常识判断':'#3d7edb','言语理解':'#3aa876','数量关系':'#e0962f','判断推理':'#8e6fd8','资料分析':'#d96a4f'};
+const MOD_ICO = {'常识判断':'🧠','言语理解':'🗣️','数量关系':'🔢','判断推理':'🧩','资料分析':'📊','政治理论':'🏛️'};
+const MOD_COLOR = {'常识判断':'#3d7edb','言语理解':'#3aa876','数量关系':'#e0962f','判断推理':'#8e6fd8','资料分析':'#d96a4f','政治理论':'#c0392b'};
 
 /* ---------- 存储 ---------- */
 const KEY='shangan_tong_v1';

@@ -49,7 +49,7 @@ if r.returncode != 0:
 else:
     check('JS 语法/加载', True)
     report = json.loads(m.group(1))
-    expected = {'常识判断':11787,'言语理解':6275,'数量关系':3562,'判断推理':11843,'资料分析':6536}
+    expected = {'常识判断':8923,'言语理解':6117,'数量关系':3562,'判断推理':11823,'资料分析':6496,'政治理论':3082}
     for k,v in expected.items():
         check(f'题库-{k} 数量={v}', report['mods'].get(k)==v, f"实际{report['mods'].get(k)}")
     check('题库-字段完整性', len(report['bad'])==0, f"异常题: {report['bad'][:5]}")
@@ -67,7 +67,7 @@ with sync_playwright() as p:
     time.sleep(1)
 
     check('首页-hero', page.locator('.hero').count()==1)
-    check('首页-模块掌握度5项', page.locator('.r-mod').count()==5)
+    check('首页-模块掌握度6项', page.locator('.r-mod').count()==6)
     check('首页-快捷按钮4个', page.locator('.grid-btns .gb').count()==4)
 
     # 每日一练
@@ -113,7 +113,7 @@ with sync_playwright() as p:
     # 刷题页
     page.click('.tab[data-view="practice"]')
     time.sleep(0.3)
-    check('刷题-模块5个', page.locator('.mod-card').count()==5)
+    check('刷题-模块6个', page.locator('.mod-card').count()==6)
 
     # 申论素材
     page.click('.tab[data-view="shenlun"]')
