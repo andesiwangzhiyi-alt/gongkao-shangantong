@@ -81,6 +81,8 @@ input,textarea,select{font-family:inherit;font-size:14px}
 .q-opt.correct{border-color:var(--green);background:#f0faf4}
 .q-opt.correct .ol{background:var(--green);color:#fff}
 .q-opt.wrong{border-color:var(--red);background:#fdf1f0}
+.q-opt.multi-sel{border-color:var(--navy-2);background:var(--navy-3)}
+.q-opt.multi-sel .ol{background:var(--navy-2);color:#fff}
 .q-opt.wrong .ol{background:var(--red);color:#fff}
 .q-opt.disabled{pointer-events:none}
 .q-opt .mark{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:18px}

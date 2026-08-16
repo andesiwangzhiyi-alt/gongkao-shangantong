@@ -27,7 +27,8 @@ const __report={mods:{},bad:[]};
 for(const m in QUESTION_BANK){
   __report.mods[m]=QUESTION_BANK[m].length;
   QUESTION_BANK[m].forEach(q=>{
-    if(!q.id||!q.stem||!q.options||q.options.length!==4||!Number.isInteger(q.answer)||q.answer<0||q.answer>3||!q.analysis){
+    const ansOk = q.multi ? (typeof q.answer==='string' && /^[A-F]{2,}$/.test(q.answer)) : (Number.isInteger(q.answer) && q.answer>=0 && q.answer<=3);
+    if(!q.id||!q.stem||!q.options||q.options.length!==4||!ansOk||!q.analysis){
       __report.bad.push(String(q&&q.id));
     }
   });
@@ -48,7 +49,7 @@ if r.returncode != 0:
 else:
     check('JS 语法/加载', True)
     report = json.loads(m.group(1))
-    expected = {'常识判断':1080,'言语理解':855,'数量关系':1054,'判断推理':1424,'资料分析':714}
+    expected = {'常识判断':1082,'言语理解':855,'数量关系':1054,'判断推理':1424,'资料分析':714}
     for k,v in expected.items():
         check(f'题库-{k} 数量={v}', report['mods'].get(k)==v, f"实际{report['mods'].get(k)}")
     check('题库-字段完整性', len(report['bad'])==0, f"异常题: {report['bad'][:5]}")
@@ -137,6 +138,23 @@ with sync_playwright() as p:
     time.sleep(0.3)
     check('模考-配置页', page.locator('.exam-config .ec').count()==4)
 
+    # 多选/不定项判定逻辑
+    multi_ok = page.evaluate("""() => {
+        const t1 = isCorrect({multi:true,answer:'AB'}, [0,1]);   // 全对
+        const t2 = isCorrect({multi:true,answer:'AB'}, [1,0]);   // 乱序全对
+        const t3 = isCorrect({multi:true,answer:'AB'}, [0]);     // 漏选
+        const t4 = isCorrect({multi:true,answer:'AB'}, [0,2]);   // 错选
+        const t5 = isCorrect({multi:false,answer:2}, 2);         // 单选正确
+        const t6 = isCorrect({multi:false,answer:2}, 1);         // 单选错误
+        const t7 = qAnsText({multi:true}, [0,1])==='A、B';
+        const multiCount = Object.values(QUESTION_BANK).flat().filter(q=>q.multi).length;
+        return {t1,t2,t3,t4,t5,t6,t7,multiCount};
+    }""")
+    check('多选-判分逻辑', multi_ok['t1'] and multi_ok['t2'] and multi_ok['t3']==False and multi_ok['t4']==False, f"{multi_ok}")
+    check('单选-判分逻辑', multi_ok['t5'] and multi_ok['t6']==False)
+    check('多选-答案显示', multi_ok['t7'], f"{multi_ok}")
+    check('题库-多选题目存在', multi_ok['multiCount']>=2, f"多选 {multi_ok['multiCount']} 题")
+
     # 打卡统计（更多页已打开，检查 streak badge）
     check('顶部连续打卡badge', page.locator('#streakBadge').count()==1)
 
@@ -149,6 +167,6 @@ with sync_playwright() as p:
     page.screenshot(path=os.path.join(ROOT,'test_shots','home.png'))
     browser.close()
 
-print('\n==== 结果 ====')
-print(f'通过 {35-len(fails)}/{35}, 失败: {fails if fails else "无"}')
+print('==== 结果 ====')
+print(f'通过 {39-len(fails)}/39, 失败: {fails if fails else "无"}')
 sys.exit(1 if fails else 0)

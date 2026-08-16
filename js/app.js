@@ -11,6 +11,21 @@ function mulberry32(seed){ return function(){ seed|=0; seed=seed+0x6D2B79F5|0; l
 function seededShuffle(a, seed){ const rnd=mulberry32(seed); const r=[...a]; for(let i=r.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[r[i],r[j]]=[r[j],r[i]];} return r; }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function toast(msg, type){ const t=$('#toast'); t.textContent=msg; t.className='toast '+ (type||''); t.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.add('hidden'), 2200); }
+/* 多选/不定项判定与显示 */
+function isCorrect(q, ans){
+  if(ans===undefined||ans===null) return false;
+  if(q.multi){
+    const a = Array.isArray(ans)? ans.slice().sort().join(',') : '';
+    const b = String(q.answer).split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0).sort().join(',');
+    return a===b;
+  }
+  return ans===q.answer;
+}
+function qAnsText(q, ans){
+  if(ans===undefined||ans===null) return '';
+  if(q.multi) return (Array.isArray(ans)? ans.map(i=>'ABCD'[i]) : String(ans).split('')).join('、');
+  return 'ABCD'[ans];
+}
 const MODS = Object.keys(QUESTION_BANK);
 const MOD_ICO = {'常识判断':'🧠','言语理解':'🗣️','数量关系':'🔢','判断推理':'🧩','资料分析':'📊'};
 const MOD_COLOR = {'常识判断':'#3d7edb','言语理解':'#3aa876','数量关系':'#e0962f','判断推理':'#8e6fd8','资料分析':'#d96a4f'};
@@ -444,18 +459,40 @@ function renderQ(){
   const q=Q.list[Q.idx]; if(!q) return;
   $('#quizProgress').textContent=`${Q.idx+1}/${Q.list.length}`;
   const chosen=Q.answers[q.id];
+  const multi=!!q.multi;
+  const answered=chosen!==undefined;
+  const sel = multi&&answered&&Array.isArray(chosen)? chosen : (multi&&!answered? (Q._multiSel||[]) : []);
   const matHtml=q.mat? `<div class="q-analy" style="background:var(--navy-3);border-color:#cddcea;color:var(--ink-2);margin-bottom:14px"><b>📄 材料：</b>${esc(q.stem.split('\n\n')[0])}</div>`:'';
   const stem=matHtml? q.stem.split('\n\n').slice(1).join('\n\n') : q.stem;
   $('#quizBody').innerHTML=`
-  <div class="q-stem"><span class="q-tag">${MOD_ICO[q.mod]} ${q.mod} · ${q.type}</span>
+  <div class="q-stem"><span class="q-tag">${MOD_ICO[q.mod]} ${q.mod} · ${q.type}${multi?' · 多选题':''}</span>
     <div class="q-text">${esc(stem)}</div></div>
-  ${q.options.map((op,i)=>`
-    <button class="q-opt ${chosen!==undefined?'disabled':''} ${chosen!==undefined?(i===q.answer?'correct':(i===chosen&&chosen!==q.answer?'wrong':'')):''}" onclick="pick(${i})">
-      <span class="ol">${'ABCD'[i]}</span>${esc(op)}
-      ${chosen!==undefined&&i===chosen?`<span class="mark">${chosen===q.answer?'✅':'❌'}</span>`:''}
-      ${Q.marks[q.id]&&chosen===undefined?'<span class="marked-tag">⚑ 已标记</span>':''}
-    </button>`).join('')}
-  ${chosen!==undefined? `
+  ${q.options.map((op,i)=>{
+    let cls='q-opt'+(answered?' disabled':'');
+    let mark='';
+    if(answered){
+      const right = multi? String(q.answer).includes('ABCD'[i]) : i===q.answer;
+      const picked = multi? sel.includes(i) : chosen===i;
+      if(right) cls+=' correct';
+      if(picked && !right) cls+=' wrong';
+      if(multi){
+        if(picked&&right) mark='<span class="mark">✅</span>';
+        else if(picked&&!right) mark='<span class="mark">❌</span>';
+        else if(right) mark='<span class="mark" style="right:38px">✓</span>';
+      } else if(picked){
+        mark=`<span class="mark">${right?'✅':'❌'}</span>`;
+      }
+    } else if(multi && sel.includes(i)){
+      cls+=' multi-sel';
+      mark='<span class="mark">✓</span>';
+    }
+    return `<button class="${cls}" onclick="pick(${i})">
+      <span class="ol">${'ABCD'[i]}</span>${esc(op)}${mark}
+      ${Q.marks[q.id]&&!answered?'<span class="marked-tag">⚑ 已标记</span>':''}
+    </button>`;
+  }).join('')}
+  ${multi&&!answered? `<button class="btn primary" style="margin-top:14px" onclick="submitMulti()">✓ 确定选择（${sel.length} 项）</button>`:''}
+  ${answered? `
     <div class="q-analy"><b>💡 解析：</b>${esc(q.analysis)}</div>`:''}
   `;
   updateFoot();
@@ -477,30 +514,48 @@ function updateFoot(){
   }
   $('#footMark').style.display='';
   $('#footMark').textContent=Q.marks[q.id]?'⚑ 取消标记':'⚑ 标记';
-  $('#footNext').textContent=isLast?'交卷':'下一题';
+  const multiUnanswered = q.multi && chosen===undefined;
+  $('#footNext').textContent = multiUnanswered? '确定选择' : (isLast?'交卷':'下一题');
   $('#footNext').className='btn primary';
-  $('#footNext').onclick=nextQ;
+  $('#footNext').onclick = multiUnanswered? submitMulti : nextQ;
 }
 function pick(i){
   const q=Q.list[Q.idx];
   if(Q.answers[q.id]!==undefined) return;
+  if(q.multi){
+    let sel = Q._multiSel || [];
+    if(sel.includes(i)) sel = sel.filter(x=>x!==i); else sel = [...sel, i].sort();
+    Q._multiSel = sel;
+    renderQ();
+    return;
+  }
   Q.answers[q.id]=i;
   recordResult(q,i,i===q.answer);
   renderQ();
 }
-function nextQ(){ if(Q.idx<Q.list.length-1){ Q.idx++; renderQ(); } else finishQuiz(); }
-function prevQ(){ if(Q.idx>0){ Q.idx--; renderQ(); } }
+function submitMulti(){
+  const q=Q.list[Q.idx];
+  if(!q||!q.multi||Q.answers[q.id]!==undefined) return;
+  const sel=(Q._multiSel||[]).slice().sort();
+  if(!sel.length){ toast('请至少选择一个选项'); return; }
+  Q.answers[q.id]=sel;
+  Q._multiSel=null;
+  recordResult(q,sel,isCorrect(q,sel));
+  renderQ();
+}
+function nextQ(){ if(Q.idx<Q.list.length-1){ Q.idx++; Q._multiSel=null; renderQ(); } else finishQuiz(); }
+function prevQ(){ if(Q.idx>0){ Q.idx--; Q._multiSel=null; renderQ(); } }
 function markQ(){ const id=Q.list[Q.idx].id; if(Q.answers[id]!==undefined) return; Q.marks[id]=!Q.marks[id]; renderQ(); }
 function finishQuiz(forced){
   clearInterval(Q.timer); Q.timer=null;
   const total=Q.list.length;
   const answered=Object.keys(Q.answers).length;
-  const correct=Q.list.filter(q=>Q.answers[q.id]===q.answer).length;
+  const correct=Q.list.filter(q=>isCorrect(q,Q.answers[q.id])).length;
   const unans=total-answered;
   $('#quizLayer').classList.add('hidden');
   document.body.style.overflow='';
   const acc=answered?Math.round(correct/answered*100):0;
-  const mods={}; Q.list.forEach(q=>{ (mods[q.mod]=mods[q.mod]||{n:0,c:0}); mods[q.mod].n++; if(Q.answers[q.id]===q.answer) mods[q.mod].c++; });
+  const mods={}; Q.list.forEach(q=>{ (mods[q.mod]=mods[q.mod]||{n:0,c:0}); mods[q.mod].n++; if(isCorrect(q,Q.answers[q.id])) mods[q.mod].c++; });
   const tips=acc>=90?'状态极佳，保持！':acc>=75?'发挥稳定，查漏补缺更上一层楼':acc>=60?'基础尚可，错题本多复习': '别灰心，错题就是提分空间，复习后再来！';
   $('#resultBox').innerHTML=`
     <h3 style="color:var(--navy)">${forced?'⏰ 时间到 · 交卷':'✅ 答题完成'}</h3>
@@ -531,22 +586,35 @@ function renderReview(){
   const q=Q.list[Q.idx];
   $('#quizProgress').textContent=`${Q.idx+1}/${Q.list.length}`;
   const chosen=Q.answers[q.id];
+  const multi=!!q.multi;
+  const sel = multi&&Array.isArray(chosen)? chosen : [];
   $('#quizBody').innerHTML=`
-  <div class="q-stem"><span class="q-tag">${MOD_ICO[q.mod]} ${q.mod} · ${q.type}</span>
+  <div class="q-stem"><span class="q-tag">${MOD_ICO[q.mod]} ${q.mod} · ${q.type}${multi?' · 多选题':''}</span>
     <div class="q-text">${esc(q.stem)}</div></div>
-  ${q.options.map((op,i)=>`
-    <div class="q-opt disabled ${i===q.answer?'correct':(i===chosen&&chosen!==q.answer?'wrong':'')}">
-      <span class="ol">${'ABCD'[i]}</span>${esc(op)}
-      ${i===chosen?`<span class="mark">${chosen===q.answer?'✅':'❌'}</span>`:''}
-      ${i===q.answer&&chosen!==q.answer?'<span class="mark" style="right:38px">✓</span>':''}
-    </div>`).join('')}
-  <div class="q-analy"><b>💡 解析：</b>${esc(q.analysis)}<br><span class="muted">你${chosen!==undefined?'选了 '+('ABCD'[chosen])+(chosen===q.answer?'，回答正确':'，回答错误'):'未作答'} · 正确答案 ${'ABCD'[q.answer]}</span></div>`;
+  ${q.options.map((op,i)=>{
+    const right = multi? String(q.answer).includes('ABCD'[i]) : i===q.answer;
+    const picked = multi? sel.includes(i) : chosen===i;
+    let cls='q-opt disabled'+(right?' correct':(picked?' wrong':''));
+    let mark='';
+    if(multi){
+      if(picked&&right) mark='<span class="mark">✅</span>';
+      else if(picked&&!right) mark='<span class="mark">❌</span>';
+      else if(right) mark='<span class="mark" style="right:38px">✓</span>';
+    } else if(picked){
+      mark=`<span class="mark">${right?'✅':'❌'}</span>`;
+    }
+    return `<div class="${cls}">
+      <span class="ol">${'ABCD'[i]}</span>${esc(op)}${mark}
+    </div>`;
+  }).join('')}
+  <div class="q-analy"><b>💡 解析：</b>${esc(q.analysis)}<br><span class="muted">你${chosen!==undefined? '选了 '+qAnsText(q,chosen)+(isCorrect(q,chosen)?'，回答正确':'，回答错误'):'未作答'} · 正确答案 ${qAnsText(q,q.answer)}</span></div>`;
   updateFoot();
 }
 function reviewNav(dir){ Q.idx+=dir; if(Q.idx<0)Q.idx=0; if(Q.idx>=Q.list.length)Q.idx=Q.list.length-1; renderReview(); }
 document.addEventListener('keydown',e=>{
   if($('#quizLayer').classList.contains('hidden')) return;
   if(e.key>='1'&&e.key<='4') pick(+e.key-1);
+  else if(e.key==='Enter'){ const q=Q.list[Q.idx]; if(q&&q.multi&&Q.answers[q.id]===undefined) submitMulti(); }
   else if(e.key==='ArrowRight') Q.mode==='review'?reviewNav(1):nextQ();
   else if(e.key==='ArrowLeft') Q.mode==='review'?reviewNav(-1):prevQ();
 });
