@@ -175,8 +175,183 @@ function renderPractice(){
     <div class="btn-row">
       <button class="btn" onclick="startQuiz(shuffle(allQuestions()),'全模块随机 15 题')">🎲 全模块随机</button>
       <button class="btn gold" onclick="startQuiz(shuffle(allQuestions().filter(q=>q.mod==='数量关系'||q.mod==='资料分析')).slice(0,8),'数量+资料强化')">💪 数量+资料</button>
+      <button class="btn" onclick="smartQuiz()">🧠 智能组卷（薄弱点强化）</button>
+    </div>
+  </div>
+  <div class="card"><h3><span class="dot"></span>🔍 题库检索</h3>
+    <div class="muted mb10">按关键词/考点/来源/正确率筛选全库 40000+ 题，支持练习与导出</div>
+    <div class="search-grid">
+      <input id="searchKw" placeholder="关键词（题干/选项/解析）" oninput="doSearch()">
+      <input id="searchPoint" placeholder="考点关键词（如 逻辑推理/比重）" oninput="doSearch()">
+      <select id="searchSrc" onchange="doSearch()">
+        <option value="">全部来源</option><option>国考</option><option>省考</option><option>模考</option><option>原创</option><option>精选</option>
+      </select>
+      <select id="searchMod" onchange="doSearch()">
+        <option value="">全部模块</option>${MODS.map(m=>`<option>${m}</option>`).join('')}
+      </select>
+      <select id="searchRate" onchange="doSearch()">
+        <option value="">正确率不限</option><option value="80">正确率 ≥80%</option><option value="60">正确率 60-80%</option><option value="0">正确率 &lt;60%</option>
+      </select>
+      <button class="btn" onclick="doSearch()">搜索</button>
+    </div>
+    <div id="searchResults" class="search-results"><div class="muted">输入关键词开始检索…</div></div>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn" onclick="startQuiz(shuffle(__lastSearch||[]),'检索结果练习 '+ (__lastSearch||[]).length+'题')">▶ 练习所选</button>
+      <button class="btn" onclick="exportFiltered('json')">⬇ 导出 JSON</button>
+      <button class="btn" onclick="exportFiltered('txt')">⬇ 导出文本</button>
+      <button class="btn gold" onclick="printFiltered()">🖨 打印 / PDF</button>
     </div>
   </div>`;
+}
+
+/* ---------- 标签与来源解析 ---------- */
+function qSource(q){
+  if(!q.tag) return '';
+  const t = String(q.tag);
+  if(t.includes('国考')) return '国考真题';
+  if(t.includes('模考')) return '模考';
+  if(/^[\u4e00-\u9fa5]{2,4}\d{4}$/.test(t)||t.includes('20')) return t.includes('年')? '省考真题':'省考';
+  return t;
+}
+function qRate(q){
+  const m = (q.analysis||'').match(/正确率\s*([\d.]+)%/);
+  return m? m[1] : '';
+}
+function qPoints(q){
+  const m = (q.analysis||'').match(/考点：([^\n【】]+)/);
+  return m? m[1].trim() : '';
+}
+function qTagHtml(q){
+  const parts=[];
+  if(q.multi) parts.push('<span class="tag" style="background:#e8d9ff;color:#8e6fd8">多选</span>');
+  if(q.type) parts.push(`<span class="tag" style="background:#e8f0fe;color:#3d7edb">${esc(q.type)}</span>`);
+  const src=qSource(q); if(src) parts.push(`<span class="tag" style="background:#e6f7ec;color:#3aa876">${esc(src)}</span>`);
+  const rt=qRate(q); if(rt) parts.push(`<span class="tag" style="background:#fdf3e2;color:#e0962f">正确率 ${rt}%</span>`);
+  const pt=qPoints(q); if(pt) parts.push(`<span class="tag" style="background:#fdeaea;color:#d96a4f">${esc(pt.split(' ')[0])}</span>`);
+  return parts.join('');
+}
+
+/* ---------- 题库检索 ---------- */
+let __lastSearch=[];
+function doSearch(){
+  const kw=($('#searchKw')?.value||'').trim().toLowerCase();
+  const pt=($('#searchPoint')?.value||'').trim().toLowerCase();
+  const src=$('#searchSrc')?.value||'';
+  const mod=$('#searchMod')?.value||'';
+  const rate=$('#searchRate')?.value||'';
+  if(!kw&&!pt&&!src&&!mod&&!rate){ $('#searchResults').innerHTML='<div class="muted">输入关键词开始检索…</div>'; __lastSearch=[]; return; }
+  const list=allQuestions().filter(q=>{
+    if(mod&&q.mod!==mod) return false;
+    if(src){
+      const s=qSource(q);
+      if(src==='国考'&&!s.includes('国考')) return false;
+      if(src==='省考'&&!s.includes('省考')) return false;
+      if(src==='模考'&&!s.includes('模考')) return false;
+      if(src==='原创'&&!String(q.tag||'').includes('原创')) return false;
+      if(src==='精选'&&String(q.tag||'').includes('精选')) return false;
+    }
+    if(rate){
+      const r=parseFloat(qRate(q));
+      if(rate==='80'&&(isNaN(r)||r<80)) return false;
+      if(rate==='60'&&(isNaN(r)||r<60||r>=80)) return false;
+      if(rate==='0'&&(isNaN(r)||r>=60)) return false;
+    }
+    if(kw){
+      const hay=(q.stem+' '+q.options.join(' ')+' '+q.analysis).toLowerCase();
+      if(!hay.includes(kw)) return false;
+    }
+    if(pt){
+      const hay=(qPoints(q)+' '+q.analysis).toLowerCase();
+      if(!hay.includes(pt)) return false;
+    }
+    return true;
+  });
+  __lastSearch=list;
+  $('#searchResults').innerHTML = list.length
+    ? `<div class="muted" style="margin-bottom:8px">共 ${list.length} 题（点击任意题直接练习）</div>`+
+      list.slice(0,30).map((q,i)=>`<div class="sr-item" onclick="startQuiz(shuffle(__lastSearch),'检索结果练习')">
+        <span class="sr-no">${i+1}</span>
+        <span class="sr-stem">${esc(q.stem.slice(0,60))}${q.stem.length>60?'…':''}</span>
+        ${qTagHtml(q)}
+      </div>`).join('') + (list.length>30?`<div class="muted">…还有 ${list.length-30} 题，点击上方按钮直接练习全部</div>`:'')
+    : '<div class="muted">没有匹配的题目，换个关键词试试</div>';
+}
+
+/* ---------- 导出 ---------- */
+function exportFiltered(kind){
+  const list=__lastSearch||[];
+  if(!list.length){ toast('请先搜索出题目再导出'); return; }
+  if(kind==='json'){
+    const data={exported:new Date().toISOString(), count:list.length, questions:list.map(q=>({mod:q.mod,id:q.id,type:q.type,multi:q.multi||false,stem:q.stem,options:q.options,answer:q.multi?q.answer:('ABCD'[q.answer]),analysis:q.analysis,tag:q.tag,images:q.images||[],opt_images:q.opt_images||[]}))};
+    downloadFile('上岸通_检索导出_'+Date.now()+'.json', JSON.stringify(data,null,1), 'application/json');
+  } else {
+    let txt='上岸通题库导出（共'+list.length+'题）\n生成时间：'+new Date().toLocaleString()+'\n'+'='.repeat(40)+'\n\n';
+    list.forEach((q,i)=>{
+      txt+=`【${i+1}】[${q.mod}] ${q.type}${q.multi?'（多选）':''} ${qSource(q)}\n`;
+      txt+=q.stem+'\n';
+      q.options.forEach((o,j)=>txt+=`  ${'ABCD'[j]}. ${o}\n`);
+      txt+=`答案：${q.multi?q.answer:('ABCD'[q.answer])}\n`;
+      if(qRate(q)) txt+=`正确率：${qRate(q)}%\n`;
+      if(qPoints(q)) txt+=`考点：${qPoints(q)}\n`;
+      txt+=`解析：${q.analysis.replace(/【[^】]*】\n?/g,'')}\n\n${'-'.repeat(30)}\n\n`;
+    });
+    downloadFile('上岸通_检索导出_'+Date.now()+'.txt', txt, 'text/plain;charset=utf-8');
+  }
+  toast('已导出 '+list.length+' 题');
+}
+function downloadFile(name, content, mime){
+  const blob=new Blob([content],{type:mime});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+}
+function printFiltered(){
+  const list=__lastSearch||[];
+  if(!list.length){ toast('请先搜索出题目再导出'); return; }
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>上岸通 · 题目与解析</title>
+  <style>body{font-family:'Microsoft YaHei',sans-serif;padding:24px;color:#222;max-width:820px;margin:0 auto}
+  .q{margin-bottom:22px;padding-bottom:16px;border-bottom:1px dashed #ccc;page-break-inside:avoid}
+  .no{font-weight:700;color:#3d7edb;margin-bottom:6px}.stem{margin-bottom:8px;line-height:1.7}
+  .opt{margin:3px 0 3px 18px}.ans{color:#3aa876;font-weight:600;margin-top:6px}
+  .ana{background:#f6f8fb;border-left:3px solid #3d7edb;padding:10px 12px;margin-top:8px;line-height:1.7;font-size:13.5px;white-space:pre-wrap}
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:8px;background:#eee;margin:0 4px 2px 0}
+  h1{color:#1b2a4a;text-align:center}@media print{.q{break-inside:avoid}}</style></head><body>
+  <h1>📘 上岸通 · 题目与解析（${list.length} 题）</h1>
+  <p style="text-align:center;color:#888">生成时间：${new Date().toLocaleString()}</p>
+  ${list.map((q,i)=>`<div class="q"><div class="no">${i+1}. [${q.mod}] ${q.type}${q.multi?'（多选）':''}</div>
+    <div class="tag" style="background:#e8f0fe;color:#3d7edb">${esc(qSource(q)||'未标注')}</div>${qRate(q)?`<div class="tag" style="background:#fdf3e2;color:#e0962f">正确率 ${qRate(q)}%</div>`:''}${qPoints(q)?`<div class="tag" style="background:#fdeaea;color:#d96a4f">${esc(qPoints(q))}</div>`:''}
+    <div class="stem">${esc(q.stem).replace(/\[图(\d+)\]/g,'[图片]')}</div>
+    ${q.options.map((o,j)=>`<div class="opt">${'ABCD'[j]}. ${esc(o)}</div>`).join('')}
+    <div class="ans">✅ 答案：${q.multi?q.answer:('ABCD'[q.answer])}</div>
+    <div class="ana">${esc(q.analysis)}</div></div>`).join('')}
+  <script>window.onload=function(){setTimeout(()=>window.print(),400)}</script>
+  </body></html>`);
+  w.document.close();
+}
+
+/* ---------- 智能组卷（薄弱点强化） ---------- */
+function smartQuiz(){
+  // 按错题考点 + 模块正确率生成薄弱点练习
+  const wrong=Object.keys(store.wrongs).map(id=>allQuestions().find(q=>q.id===id)).filter(Boolean);
+  const pointCount={};
+  wrong.forEach(q=>{ const p=qPoints(q)||'未分类'; pointCount[p]=(pointCount[p]||0)+1; });
+  const weakPoints=Object.entries(pointCount).sort((a,b)=>b[1]-a[1]).slice(0,5).map(x=>x[0]);
+  const weakMods=MODS.map(m=>{const b=store.stats.byMod[m]||{answered:0,correct:0};return {m,acc:b.answered?b.correct/b.answered:0,n:b.answered};})
+    .filter(x=>x.n>=5).sort((a,b)=>a.acc-b.acc).slice(0,2).map(x=>x.m);
+  let pool=[];
+  if(weakPoints.length){
+    pool=allQuestions().filter(q=>{ const p=qPoints(q); return weakPoints.some(wp=>p&&p.includes(wp.split(' ')[0])); });
+  }
+  if(pool.length<15 && weakMods.length){
+    pool=pool.concat(allQuestions().filter(q=>weakMods.includes(q.mod)));
+  }
+  if(pool.length<15){ pool=allQuestions().filter(q=>wrong.some(w=>w.mod===q.mod)); }
+  const list=shuffle([...new Set(pool)]).slice(0,15);
+  if(!list.length){ toast('题库为空或暂无错题数据'); return; }
+  const info=weakPoints.length?('薄弱考点：'+weakPoints.slice(0,3).join('、')):(weakMods.length?('薄弱模块：'+weakMods.join('、')):'随机强化');
+  startQuiz(list, '🧠 智能组卷 · '+info+' · '+list.length+'题');
 }
 
 /* ============ 每日一练 ============ */
@@ -478,6 +653,7 @@ function renderQ(){
   const stem=matHtml? q.stem.split('\n\n').slice(1).join('\n\n') : q.stem;
   $('#quizBody').innerHTML=`
   <div class="q-stem"><span class="q-tag">${MOD_ICO[q.mod]} ${q.mod} · ${q.type}${multi?' · 多选题':''}</span>
+    <div class="q-tags">${qTagHtml(q)}</div>
     <div class="q-text">${renderStem(q,stem)}</div></div>
   ${q.options.map((op,i)=>{
     let cls='q-opt'+(answered?' disabled':'');
@@ -602,6 +778,7 @@ function renderReview(){
   const sel = multi&&Array.isArray(chosen)? chosen : [];
   $('#quizBody').innerHTML=`
   <div class="q-stem"><span class="q-tag">${MOD_ICO[q.mod]} ${q.mod} · ${q.type}${multi?' · 多选题':''}</span>
+    <div class="q-tags">${qTagHtml(q)}</div>
     <div class="q-text">${renderStem(q,q.stem)}</div></div>
   ${q.options.map((op,i)=>{
     const right = multi? String(q.answer).includes('ABCD'[i]) : i===q.answer;
