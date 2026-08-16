@@ -20,7 +20,7 @@ const src=fs.readFileSync('js/questions.js','utf8')+fs.readFileSync('js/question
 """
 # 用 node 直接执行拼接源码，检查语法 + 统计
 js_src = ''
-for f in ['js/questions.js','js/questions2.js','js/questions3.js','js/questions4.js','js/questions5.js','js/questions6.js']:
+for f in ['js/questions.js','js/questions2.js','js/questions3.js','js/questions4.js','js/questions5.js','js/questions6.js','js/questions7.js']:
     js_src += open(os.path.join(ROOT,f), encoding='utf-8').read() + '\n'
 js_src += """
 const __report={mods:{},bad:[]};
@@ -49,7 +49,7 @@ if r.returncode != 0:
 else:
     check('JS 语法/加载', True)
     report = json.loads(m.group(1))
-    expected = {'常识判断':7382,'言语理解':3910,'数量关系':2450,'判断推理':7492,'资料分析':4225}
+    expected = {'常识判断':11787,'言语理解':6275,'数量关系':3562,'判断推理':11843,'资料分析':6536}
     for k,v in expected.items():
         check(f'题库-{k} 数量={v}', report['mods'].get(k)==v, f"实际{report['mods'].get(k)}")
     check('题库-字段完整性', len(report['bad'])==0, f"异常题: {report['bad'][:5]}")
