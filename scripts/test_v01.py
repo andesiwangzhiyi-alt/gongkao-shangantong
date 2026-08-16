@@ -155,6 +155,15 @@ with sync_playwright() as p:
     check('多选-答案显示', multi_ok['t7'], f"{multi_ok}")
     check('题库-多选题目存在', multi_ok['multiCount']>=2, f"多选 {multi_ok['multiCount']} 题")
 
+    # 图片渲染逻辑
+    img_ok = page.evaluate("""() => {
+        const s1 = renderStem({images:['assets/img/a1.png']}, '请看图[图0]');
+        const s2 = optImgsHtml({opt_images:[['assets/img/a2.png']]}, 0);
+        return {t1: s1.includes('<img') && s1.includes('a1.png'), t2: s2.includes('a2.png')};
+    }""")
+    check('题干-图片渲染', img_ok['t1'], f"{img_ok}")
+    check('选项-图片渲染', img_ok['t2'], f"{img_ok}")
+
     # 打卡统计（更多页已打开，检查 streak badge）
     check('顶部连续打卡badge', page.locator('#streakBadge').count()==1)
 
@@ -168,5 +177,5 @@ with sync_playwright() as p:
     browser.close()
 
 print('==== 结果 ====')
-print(f'通过 {39-len(fails)}/39, 失败: {fails if fails else "无"}')
+print(f'通过 {41-len(fails)}/41, 失败: {fails if fails else "无"}')
 sys.exit(1 if fails else 0)

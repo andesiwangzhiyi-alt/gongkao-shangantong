@@ -26,6 +26,18 @@ function qAnsText(q, ans){
   if(q.multi) return (Array.isArray(ans)? ans.map(i=>'ABCD'[i]) : String(ans).split('')).join('、');
   return 'ABCD'[ans];
 }
+/* 渲染题干文本（替换 [图N] 占位为图片）与选项图片 */
+function renderStem(q, stem){
+  let s = esc(stem);
+  if(q.images&&q.images.length){
+    s = s.replace(/\[图(\d+)\]/g, (m,n)=>`<img class="q-img" src="${q.images[+n]}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`);
+  }
+  return s;
+}
+function optImgsHtml(q, i){
+  if(!q.opt_images||!q.opt_images[i]||!q.opt_images[i].length) return '';
+  return q.opt_images[i].map(u=>`<img class="q-img opt-img" src="${u}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`).join('');
+}
 const MODS = Object.keys(QUESTION_BANK);
 const MOD_ICO = {'常识判断':'🧠','言语理解':'🗣️','数量关系':'🔢','判断推理':'🧩','资料分析':'📊'};
 const MOD_COLOR = {'常识判断':'#3d7edb','言语理解':'#3aa876','数量关系':'#e0962f','判断推理':'#8e6fd8','资料分析':'#d96a4f'};
@@ -466,7 +478,7 @@ function renderQ(){
   const stem=matHtml? q.stem.split('\n\n').slice(1).join('\n\n') : q.stem;
   $('#quizBody').innerHTML=`
   <div class="q-stem"><span class="q-tag">${MOD_ICO[q.mod]} ${q.mod} · ${q.type}${multi?' · 多选题':''}</span>
-    <div class="q-text">${esc(stem)}</div></div>
+    <div class="q-text">${renderStem(q,stem)}</div></div>
   ${q.options.map((op,i)=>{
     let cls='q-opt'+(answered?' disabled':'');
     let mark='';
@@ -487,7 +499,7 @@ function renderQ(){
       mark='<span class="mark">✓</span>';
     }
     return `<button class="${cls}" onclick="pick(${i})">
-      <span class="ol">${'ABCD'[i]}</span>${esc(op)}${mark}
+      <span class="ol">${'ABCD'[i]}</span>${esc(op)}${optImgsHtml(q,i)}${mark}
       ${Q.marks[q.id]&&!answered?'<span class="marked-tag">⚑ 已标记</span>':''}
     </button>`;
   }).join('')}
@@ -590,7 +602,7 @@ function renderReview(){
   const sel = multi&&Array.isArray(chosen)? chosen : [];
   $('#quizBody').innerHTML=`
   <div class="q-stem"><span class="q-tag">${MOD_ICO[q.mod]} ${q.mod} · ${q.type}${multi?' · 多选题':''}</span>
-    <div class="q-text">${esc(q.stem)}</div></div>
+    <div class="q-text">${renderStem(q,q.stem)}</div></div>
   ${q.options.map((op,i)=>{
     const right = multi? String(q.answer).includes('ABCD'[i]) : i===q.answer;
     const picked = multi? sel.includes(i) : chosen===i;
@@ -604,7 +616,7 @@ function renderReview(){
       mark=`<span class="mark">${right?'✅':'❌'}</span>`;
     }
     return `<div class="${cls}">
-      <span class="ol">${'ABCD'[i]}</span>${esc(op)}${mark}
+      <span class="ol">${'ABCD'[i]}</span>${esc(op)}${optImgsHtml(q,i)}${mark}
     </div>`;
   }).join('')}
   <div class="q-analy"><b>💡 解析：</b>${esc(q.analysis)}<br><span class="muted">你${chosen!==undefined? '选了 '+qAnsText(q,chosen)+(isCorrect(q,chosen)?'，回答正确':'，回答错误'):'未作答'} · 正确答案 ${qAnsText(q,q.answer)}</span></div>`;
