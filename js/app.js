@@ -38,6 +38,15 @@ function optImgsHtml(q, i){
   if(!q.opt_images||!q.opt_images[i]||!q.opt_images[i].length) return '';
   return q.opt_images[i].map(u=>`<img class="q-img opt-img" src="${u}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`).join('');
 }
+/* 渲染材料（文本 + [图] 占位替换为材料图） */
+function renderMat(q){
+  let s=esc(q.mat);
+  if(q.mat_images&&q.mat_images.length){
+    let n=0;
+    s=s.replace(/\[图\]/g,()=>`<img class="q-img" src="${q.mat_images[n++]}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`);
+  }
+  return s;
+}
 const MODS = Object.keys(QUESTION_BANK);
 const MOD_ICO = {'常识判断':'🧠','言语理解':'🗣️','数量关系':'🔢','判断推理':'🧩','资料分析':'📊','政治理论':'🏛️'};
 const MOD_COLOR = {'常识判断':'#3d7edb','言语理解':'#3aa876','数量关系':'#e0962f','判断推理':'#8e6fd8','资料分析':'#d96a4f','政治理论':'#c0392b'};
@@ -452,12 +461,9 @@ function printPaper(qs){
     const part=qs.filter(q=>q.mod===m);
     return `<div class="part">${MOD_ICO[m]} ${m}（${part.length} 题）</div>`+part.map((q,i)=>{
       const no=qs.indexOf(q)+1;
-      // 材料（若题干含材料分隔）
-      const hasMat=q.stem.includes('\n\n');
-      const stem=hasMat? q.stem.split('\n\n').slice(1).join('\n\n') : q.stem;
-      const mat=hasMat? q.stem.split('\n\n')[0] : '';
-      return (mat?`<div class="material">${esc(mat)}</div>`:'')+
-        `<div class="q"><span class="no">${no}.</span><div class="stem">${esc(stem).replace(/\[图(\d+)\]/g,'（图）')}</div>
+      const mat=q.mat||'';
+      return (mat?`<div class="material">${esc(mat).replace(/\[图\]/g,'（图）')}</div>`:'')+
+        `<div class="q"><span class="no">${no}.</span><div class="stem">${esc(q.stem).replace(/\[图(\d+)\]/g,'（图）')}</div>
         <div class="opts">${q.options.map((o,j)=>`<div>${'ABCD'[j]}. ${esc(o)}</div>`).join('')}</div></div>`;
     }).join('');
   }).join('')}
@@ -788,8 +794,8 @@ function renderQ(){
   const multi=!!q.multi;
   const answered=chosen!==undefined;
   const sel = multi&&answered&&Array.isArray(chosen)? chosen : (multi&&!answered? (Q._multiSel||[]) : []);
-  const matHtml=q.mat? `<div class="q-analy" style="background:var(--navy-3);border-color:#cddcea;color:var(--ink-2);margin-bottom:14px"><b>📄 材料：</b>${esc(q.stem.split('\n\n')[0])}</div>`:'';
-  const stem=matHtml? q.stem.split('\n\n').slice(1).join('\n\n') : q.stem;
+  const matHtml=q.mat? `<div class="q-analy" style="background:var(--navy-3);border-color:#cddcea;color:var(--ink-2);margin-bottom:14px"><b>📄 材料：</b>${renderMat(q)}</div>`:'';
+  const stem=matHtml? q.stem : q.stem;
   $('#quizBody').innerHTML=`
   <div class="q-stem"><span class="q-tag">${MOD_ICO[q.mod]} ${q.mod} · ${q.type}${multi?' · 多选题':''}</span>
     <div class="q-tags">${qTagHtml(q)}</div>
@@ -918,6 +924,7 @@ function renderReview(){
   $('#quizBody').innerHTML=`
   <div class="q-stem"><span class="q-tag">${MOD_ICO[q.mod]} ${q.mod} · ${q.type}${multi?' · 多选题':''}</span>
     <div class="q-tags">${qTagHtml(q)}</div>
+    ${q.mat?`<div class="q-analy" style="background:var(--navy-3);border-color:#cddcea;color:var(--ink-2);margin-bottom:10px"><b>📄 材料：</b>${renderMat(q)}</div>`:''}
     <div class="q-text">${renderStem(q,q.stem)}</div></div>
   ${q.options.map((op,i)=>{
     const right = multi? String(q.answer).includes('ABCD'[i]) : i===q.answer;

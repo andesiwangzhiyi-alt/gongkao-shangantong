@@ -49,7 +49,7 @@ if r.returncode != 0:
 else:
     check('JS 语法/加载', True)
     report = json.loads(m.group(1))
-    expected = {'常识判断':8923,'言语理解':6117,'数量关系':3562,'判断推理':11823,'资料分析':6496,'政治理论':3082}
+    expected = {'常识判断':9081,'言语理解':6117,'数量关系':3564,'判断推理':11823,'资料分析':6336,'政治理论':3082}
     for k,v in expected.items():
         check(f'题库-{k} 数量={v}', report['mods'].get(k)==v, f"实际{report['mods'].get(k)}")
     check('题库-字段完整性', len(report['bad'])==0, f"异常题: {report['bad'][:5]}")
