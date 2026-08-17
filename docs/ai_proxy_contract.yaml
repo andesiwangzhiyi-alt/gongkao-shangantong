@@ -1,0 +1,465 @@
+openapi: 3.1.0
+info:
+  title: 上岸通 AI Proxy API
+  version: 0.1.0-draft
+  description: >-
+    上岸通 3.0 的模型无关代理契约。2.0 仅预留，不应在浏览器中保存模型供应商 API Key。
+servers:
+  - url: /api/ai/v1
+security:
+  - sessionAuth: []
+paths:
+  /hints:
+    post:
+      operationId: createHint
+      summary: 生成不泄露答案的行测分级提示
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HintRequest'
+      responses:
+        '200':
+          description: 分级提示
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      result:
+                        $ref: '#/components/schemas/HintResult'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /explain:
+    post:
+      operationId: explainQuestion
+      summary: 针对用户困惑重讲行测解析
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplainRequest'
+      responses:
+        '200':
+          description: 针对性讲解
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      result:
+                        $ref: '#/components/schemas/ExplainResult'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /essay/review:
+    post:
+      operationId: reviewEssay
+      summary: 申论小题或大作文结构化反馈
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EssayReviewRequest'
+      responses:
+        '200':
+          description: 带原文证据的多维反馈
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      result:
+                        $ref: '#/components/schemas/EssayReviewResult'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /questions/generate:
+    post:
+      operationId: generateQuestion
+      summary: 生成仅供 AI 练习区使用的变式题
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateQuestionRequest'
+      responses:
+        '200':
+          description: 已通过结构校验的候选题；不代表已通过人工审核
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      result:
+                        $ref: '#/components/schemas/GeneratedQuestionResult'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: sat_session
+  responses:
+    ValidationError:
+      description: 请求或模型输出未通过校验
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: 用户配额或系统限流
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    PrivacyOptions:
+      type: object
+      additionalProperties: false
+      properties:
+        storeText:
+          type: boolean
+          default: false
+          description: 是否由服务端持久保存用户原文；默认禁止
+        consentToThirdParty:
+          type: boolean
+          default: false
+          description: 用户是否已知情同意发送给第三方模型服务
+    QuestionContext:
+      type: object
+      additionalProperties: false
+      required: [id, module, stem, options, answer]
+      properties:
+        id:
+          type: string
+        module:
+          type: string
+          enum: [政治理论, 常识判断, 言语理解, 数量关系, 判断推理, 资料分析]
+        stem:
+          type: string
+          maxLength: 12000
+        material:
+          type: string
+          maxLength: 30000
+        options:
+          type: array
+          minItems: 4
+          maxItems: 6
+          items:
+            type: string
+            maxLength: 6000
+        answer:
+          type: string
+          pattern: '^[A-F]{1,6}$'
+        analysis:
+          type: string
+          maxLength: 20000
+        points:
+          type: array
+          items:
+            type: string
+    HintRequest:
+      type: object
+      additionalProperties: false
+      required: [question, level]
+      properties:
+        question:
+          $ref: '#/components/schemas/QuestionContext'
+        level:
+          type: integer
+          minimum: 1
+          maximum: 4
+        userAttempt:
+          type: string
+          maxLength: 2000
+        privacy:
+          $ref: '#/components/schemas/PrivacyOptions'
+    HintResult:
+      type: object
+      additionalProperties: false
+      required: [level, hint, revealsAnswer]
+      properties:
+        level:
+          type: integer
+          minimum: 1
+          maximum: 4
+        hint:
+          type: string
+        revealsAnswer:
+          type: boolean
+          description: H1-H3 必须为 false
+        nextAction:
+          type: string
+    ExplainRequest:
+      type: object
+      additionalProperties: false
+      required: [question, userQuestion]
+      properties:
+        question:
+          $ref: '#/components/schemas/QuestionContext'
+        userChoice:
+          type: string
+          pattern: '^[A-F]{1,6}$'
+        userQuestion:
+          type: string
+          minLength: 1
+          maxLength: 3000
+        style:
+          type: string
+          enum: [brief, step_by_step, analogy, option_by_option]
+          default: step_by_step
+        privacy:
+          $ref: '#/components/schemas/PrivacyOptions'
+    ExplainResult:
+      type: object
+      additionalProperties: false
+      required: [stuckPoint, explanation, transferableRule]
+      properties:
+        stuckPoint:
+          type: string
+        explanation:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        optionReview:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [option, verdict, reason]
+            properties:
+              option:
+                type: string
+              verdict:
+                type: string
+                enum: [correct, wrong, tempting]
+              reason:
+                type: string
+        transferableRule:
+          type: string
+        checkQuestion:
+          type: string
+    EssayReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [examType, taskType, prompt, material, response, rubricVersion]
+      properties:
+        examType:
+          type: string
+          enum: [国考副省级, 国考市地级, 国考行政执法, 省考A类, 省考B类, 省考C类, 其他]
+        taskType:
+          type: string
+          enum: [归纳概括, 综合分析, 提出对策, 贯彻执行, 大作文]
+        prompt:
+          type: string
+          maxLength: 6000
+        material:
+          type: string
+          maxLength: 80000
+        response:
+          type: string
+          minLength: 1
+          maxLength: 30000
+        wordLimit:
+          type: integer
+          minimum: 50
+          maximum: 3000
+        rubricVersion:
+          type: string
+        estimateScore:
+          type: boolean
+          default: false
+          description: 未经校准的环境必须忽略此字段并只给形成性反馈
+        privacy:
+          $ref: '#/components/schemas/PrivacyOptions'
+    Evidence:
+      type: object
+      additionalProperties: false
+      required: [source, quote, supports]
+      properties:
+        source:
+          type: string
+          enum: [material, response, format]
+        quote:
+          type: string
+        supports:
+          type: string
+    DimensionReview:
+      type: object
+      additionalProperties: false
+      required: [dimension, assessment, evidence, actions]
+      properties:
+        dimension:
+          type: string
+        scoreRange:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: number
+        assessment:
+          type: string
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evidence'
+        actions:
+          type: array
+          items:
+            type: string
+    EssayReviewResult:
+      type: object
+      additionalProperties: false
+      required: [status, taskRecognition, dimensions, priorities, disclaimer]
+      properties:
+        status:
+          type: string
+          enum: [complete, insufficient_evidence]
+        taskRecognition:
+          type: string
+        scoreRange:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: number
+        dimensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DimensionReview'
+        coveredMaterialPoints:
+          type: array
+          items:
+            type: string
+        missingMaterialPoints:
+          type: array
+          items:
+            type: string
+        priorities:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+        revisedExample:
+          type: string
+        uncertainty:
+          type: array
+          items:
+            type: string
+        disclaimer:
+          type: string
+    GenerateQuestionRequest:
+      type: object
+      additionalProperties: false
+      required: [module, point, difficulty]
+      properties:
+        module:
+          type: string
+          enum: [政治理论, 常识判断, 言语理解, 数量关系, 判断推理, 资料分析]
+        point:
+          type: string
+        difficulty:
+          type: string
+          enum: [简单, 中等, 较难, 困难]
+        referenceQuestion:
+          $ref: '#/components/schemas/QuestionContext'
+        privacy:
+          $ref: '#/components/schemas/PrivacyOptions'
+    GeneratedQuestionResult:
+      type: object
+      additionalProperties: false
+      required: [origin, reviewStatus, question, selfCheck]
+      properties:
+        origin:
+          type: string
+          const: ai_generated
+        reviewStatus:
+          type: string
+          enum: [unreviewed, machine_checked, human_approved]
+        question:
+          $ref: '#/components/schemas/QuestionContext'
+        selfCheck:
+          type: object
+          additionalProperties: false
+          required: [uniqueAnswer, explanationConsistent, similarityRisk]
+          properties:
+            uniqueAnswer:
+              type: boolean
+            explanationConsistent:
+              type: boolean
+            similarityRisk:
+              type: string
+              enum: [low, medium, high]
+    Usage:
+      type: object
+      additionalProperties: false
+      properties:
+        inputTokens:
+          type: integer
+        outputTokens:
+          type: integer
+        latencyMs:
+          type: integer
+    Envelope:
+      type: object
+      required: [requestId, task, modelSnapshot, promptVersion, result, warnings, usage]
+      properties:
+        requestId:
+          type: string
+        task:
+          type: string
+        modelSnapshot:
+          type: string
+        promptVersion:
+          type: string
+        rubricVersion:
+          type: string
+        result:
+          type: object
+        warnings:
+          type: array
+          items:
+            type: string
+        usage:
+          $ref: '#/components/schemas/Usage'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [requestId, error]
+      properties:
+        requestId:
+          type: string
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [invalid_request, invalid_model_output, insufficient_evidence, rate_limited, quota_exceeded, provider_unavailable]
+            message:
+              type: string
+            retryable:
+              type: boolean

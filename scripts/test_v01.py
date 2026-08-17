@@ -19,9 +19,14 @@ const fs=require('fs');
 const src=fs.readFileSync('js/questions.js','utf8')+fs.readFileSync('js/questions2.js','utf8')+fs.readFileSync('js/questions3.js','utf8')+'\nconsole.log(JSON.stringify({mods:Object.fromEntries(Object.entries(QUESTION_BANK).map(([k,v])=>[k,v.length])),bad:[]}));';
 """
 # 用 node 直接执行拼接源码，检查语法 + 统计
+import glob
 js_src = ''
-for f in ['js/questions.js','js/questions2.js','js/questions3.js','js/questions4.js','js/questions5.js','js/questions6.js','js/questions7.js']:
+base_files = ['js/questions.js','js/questions2.js','js/questions3.js','js/questions4.js','js/questions5.js','js/questions7.js']
+chunk_files = sorted(glob.glob(os.path.join(ROOT,'js','bank','questions6_*.js')))
+for f in base_files:
     js_src += open(os.path.join(ROOT,f), encoding='utf-8').read() + '\n'
+for f in chunk_files:
+    js_src += open(f, encoding='utf-8').read() + '\n'
 js_src += """
 const __report={mods:{},bad:[]};
 for(const m in QUESTION_BANK){
@@ -49,7 +54,7 @@ if r.returncode != 0:
 else:
     check('JS 语法/加载', True)
     report = json.loads(m.group(1))
-    expected = {'常识判断':10622,'言语理解':6932,'数量关系':3949,'判断推理':13514,'资料分析':7319,'政治理论':3592}
+    expected = {'政治理论':7204,'常识判断':36472,'言语理解':28624,'数量关系':10616,'判断推理':44904,'资料分析':26358}
     for k,v in expected.items():
         check(f'题库-{k} 数量={v}', report['mods'].get(k)==v, f"实际{report['mods'].get(k)}")
     check('题库-字段完整性', len(report['bad'])==0, f"异常题: {report['bad'][:5]}")
@@ -64,11 +69,65 @@ with sync_playwright() as p:
     page.on('console', lambda m: errors.append(f'console[{m.type}]: {m.text}') if m.type=='error' else None)
     page.on('pageerror', lambda e: errors.append(f'pageerror: {e}'))
     page.goto(URL, wait_until='networkidle')
+    # v2：questions6 为懒加载；后续全库断言前显式等待完整题库
+    page.evaluate("ensureFullBank()")
+    time.sleep(0.3)
     time.sleep(1)
 
     check('首页-hero', page.locator('.hero').count()==1)
     check('首页-模块掌握度6项', page.locator('.r-mod').count()==6)
-    check('首页-快捷按钮4个', page.locator('.grid-btns .gb').count()==4)
+    check('首页-快捷按钮7个', page.locator('.grid-btns .gb').count()==7)
+
+    # 能力分析（attempts 日志 + 多维画像）
+    ana_ok = page.evaluate("""() => {
+        // 造 4 条 attempt 数据验证聚合逻辑
+        store.attempts.push({t:Date.now(),d:today(),qid:'t1',mod:'数量关系',ok:false,src:'2021·国考',point:'工程问题',rate:45,dur:30,multi:false,type:'真题'});
+        store.attempts.push({t:Date.now(),d:today(),qid:'t2',mod:'数量关系',ok:true,src:'2021·国考',point:'工程问题',rate:45,dur:20,multi:false,type:'真题'});
+        store.attempts.push({t:Date.now(),d:today(),qid:'t3',mod:'言语理解',ok:true,src:'2023·国考模考',point:'逻辑填空',rate:70,dur:15,multi:false,type:'模考'});
+        store.attempts.push({t:Date.now(),d:today(),qid:'t4',mod:'资料分析',ok:false,src:'2022·省考模考',point:'比重',rate:55,dur:40,multi:false,type:'模考'});
+        const wp = weakPoints('数量关系');
+        const ok1 = wp.length>0 && wp[0].acc===50 && wp[0].point==='工程问题';
+        const ab = abilityByMod('数量关系');
+        const ok2 = ab.total===2 && ab.correct===1;
+        const bands = [diffBand(85),diffBand(70),diffBand(50),diffBand(30)];
+        const ok3 = bands.join(',')==='简单,中等,较难,困难';
+        return {ok1, ok2, ok3, wp};
+    }""")
+    check('画像-薄弱考点聚合', ana_ok['ok1'] and ana_ok['ok2'] and ana_ok['ok3'], f"{ana_ok['wp']}")
+    page.evaluate("renderAnalysis()")
+    time.sleep(0.4)
+    check('画像-分析页渲染', page.locator('#view').inner_text().count('能力分析')>=1)
+    # 清理测试数据（保留 attempts 会影响后续统计断言，回退到空）
+    page.evaluate("() => { store.attempts=[]; save(); }")
+    page.click('.tab[data-view="dashboard"]')
+    time.sleep(0.3)
+
+    # 答案回填（打印卷注册→回填→判卷闭环）
+    fb_ok = page.evaluate("""() => {
+        const qs = [{id:'gk00001',mod:'常识判断',answer:0,multi:false},{id:'gk00002',mod:'判断推理',answer:1,multi:false},{id:'mk00001',mod:'言语理解',answer:'AB',multi:true}];
+        const code = registerPaper('测试卷', qs);
+        const ps = JSON.parse(localStorage.getItem('shangan_papers_v1')||'{}');
+        const ok1 = !!ps[code] && ps[code].n===3 && ps[code].qs[0].ans===0 && ps[code].qs[2].ans==='AB';
+        localStorage.setItem('shangan_fill_'+code, JSON.stringify({'1':'A','2':'B','3':'AB'}));
+        const p = ps[code];
+        const detail = p.qs.map(q=>{
+            const raw=(JSON.parse(localStorage.getItem('shangan_fill_'+code)||'{}')[q.i]||'').trim().toUpperCase();
+            let userAns, ok=false;
+            if(q.multi){ userAns=raw.split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0).sort().join(','); ok = userAns===String(q.ans).split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0).sort().join(','); }
+            else { const idx='ABCD'.indexOf(raw); userAns=idx; ok = userAns===q.ans; }
+            return ok;
+        });
+        const allOk = detail.every(Boolean);
+        localStorage.removeItem('shangan_papers_v1'); localStorage.removeItem('shangan_fill_'+code);
+        return {ok1, allOk, detail};
+    }""")
+    check('回填-试卷注册+判卷闭环', fb_ok['ok1'] and fb_ok['allOk'], f"{fb_ok}")
+    page.evaluate("renderFillback()")
+    time.sleep(0.3)
+    check('回填-页面渲染', page.locator('#view').inner_text().count('答案回填')>=1)
+    # 切回首页继续主流程
+    page.click('.tab[data-view="dashboard"]')
+    time.sleep(0.3)
 
     # 每日一练
     page.click('.gb:has-text("每日一练")')
@@ -177,5 +236,5 @@ with sync_playwright() as p:
     browser.close()
 
 print('==== 结果 ====')
-print(f'通过 {41-len(fails)}/41, 失败: {fails if fails else "无"}')
+print(f'通过 {48-len(fails)}/48, 失败: {fails if fails else "无"}')
 sys.exit(1 if fails else 0)

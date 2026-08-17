@@ -53,14 +53,135 @@ const MOD_COLOR = {'常识判断':'#3d7edb','言语理解':'#3aa876','数量关�
 
 /* ---------- 存储 ---------- */
 const KEY='shangan_tong_v1';
-const DEF = { wrongs:{}, checkins:{}, stats:{answered:0,correct:0,byMod:{},daily:[]}, favs:[], customSl:[], pomo:{count:0,minutes:0}, settings:{dailyCount:10,reviewOn:true} };
+const DEF = { wrongs:{}, checkins:{}, stats:{answered:0,correct:0,byMod:{},daily:[]}, favs:[], customSl:[], pomo:{count:0,minutes:0}, attempts:[], settings:{dailyCount:10,reviewOn:true} };
 let store = load();
-function load(){ try{ const d=JSON.parse(localStorage.getItem(KEY)); return Object.assign({},DEF, d||{}, {stats:Object.assign({},DEF.stats,(d||{}).stats), settings:Object.assign({},DEF.settings,(d||{}).settings)}); }catch(e){ return JSON.parse(JSON.stringify(DEF)); } }
+function load(){ try{ const d=JSON.parse(localStorage.getItem(KEY)); return Object.assign({},DEF, d||{}, {stats:Object.assign({},DEF.stats,(d||{}).stats), attempts:Array.isArray((d||{}).attempts)?(d||{}).attempts:[], settings:Object.assign({},DEF.settings,(d||{}).settings)}); }catch(e){ return JSON.parse(JSON.stringify(DEF)); } }
 function save(){ localStorage.setItem(KEY, JSON.stringify(store)); }
-function allQuestions(){ return MODS.flatMap(m=>QUESTION_BANK[m].map(q=>({...q,mod:m}))); }
+function allQuestions(){
+  if(allQuestions._c) return allQuestions._c;   // 缓存题库展开结果
+  allQuestions._c = MODS.flatMap(m=>QUESTION_BANK[m].map(q=>({...q,mod:m})));
+  return allQuestions._c;
+}
+window.addEventListener('sat:bank-loaded',()=>{
+  allQuestions._c=null; // questions6 追加完成后使缓存失效
+  if(typeof currentView==='function' && currentView()==='dashboard') renderDash();
+  toast(`完整题库已就绪：${allQuestions().length.toLocaleString()} 题`,'ok');
+});
+window.addEventListener('sat:bank-error',()=>toast('完整题库加载失败，请检查网络后重试','error'));
+function requireFullBank(then){
+  if(!window.ensureFullBank || window.LAZY_BANK_STATUS?.loaded) return false;
+  toast('正在加载完整题库，请稍候…');
+  window.ensureFullBank().then(()=>then&&then()).catch(()=>{});
+  return true;
+}
+function debounce(fn, ms){
+  let t=null;
+  return function(...args){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,args), ms||250); };
+}
+
+/* ---------- 逐题作答日志（C1：能力画像的数据层） ---------- */
+const ATT_LIMIT=3000;
+function qPointOf(q){ const m=(q.analysis||'').match(/考点：([^\n【】]+)/); return m? m[1].trim() : ''; }
+function qRateOf(q){ const m=(q.analysis||'').match(/正确率\s*([\d.]+)%/); return m? +m[1] : null; }
+function logAttempt(q, picked, correct, durSec){
+  /* 每题一条：时间/模块/对错/来源/考点/难度(正确率代理)/用时/题型 */
+  const att={
+    t: Date.now(), d: today(), qid: q.id, mod: q.mod, ok: !!correct,
+    src: (q.src&&q.src.name) ? [q.src.year,q.src.exam,q.src.province].filter(Boolean).join('·') : (q.tag||''),
+    point: qPointOf(q) || '',
+    rate: qRateOf(q),
+    dur: durSec||0,
+    multi: !!q.multi,
+    type: q.type||'',
+  };
+  store.attempts.push(att);
+  if(store.attempts.length>ATT_LIMIT) store.attempts.splice(0, store.attempts.length-ATT_LIMIT);
+}
+/* 能力画像聚合（attempts → 模块/考点/难度维度统计） */
+function abilityByMod(mod){
+  const list=store.attempts.filter(a=>a.mod===mod);
+  const byPoint={};
+  list.forEach(a=>{ const k=a.point||'未标注'; (byPoint[k]=byPoint[k]||{a:0,c:0}); byPoint[k].a++; a.ok&&byPoint[k].c++; });
+  return {list, total:list.length, correct:list.filter(a=>a.ok).length, byPoint};
+}
+function weakPoints(mod, minN=2){
+  const {byPoint}=abilityByMod(mod);
+  return Object.entries(byPoint)
+    .map(([p,s])=>({point:p, n:s.a, acc:Math.round(s.c/s.a*100)}))
+    .filter(x=>x.n>=minN)
+    .sort((a,b)=>a.acc-b.acc);
+}
+/* 难度分档（正确率代理）：>=80 简单 / 60-80 中等 / 40-60 较难 / <40 困难 */
+function diffBand(rate){ if(rate==null) return '未知'; return rate>=80?'简单':rate>=60?'中等':rate>=40?'较难':'困难'; }
+const BANDS=['简单','中等','较难','困难'];
+
+/* ---------- C2 能力分析页 ---------- */
+function renderAnalysis(){
+  const V=$('#view');
+  const atts=store.attempts;
+  if(!atts.length){ V.innerHTML=`<div class="card"><h3><span class="dot"></span>📊 能力分析</h3><div class="muted">还没有作答记录——先刷几题，这里会自动生成你的多维能力画像（模块×考点矩阵、难度适配、来源表现、用时分析）。</div></div>`; return; }
+  const total=atts.length, correct=atts.filter(a=>a.ok).length, acc=Math.round(correct/total*100);
+  // 模块维度
+  const byMod={};
+  atts.forEach(a=>{ (byMod[a.mod]=byMod[a.mod]||{a:0,c:0}); byMod[a.mod].a++; a.ok&&byMod[a.mod].c++; });
+  // 难度维度
+  const byBand={};
+  BANDS.forEach(b=>byBand[b]={a:0,c:0});
+  atts.forEach(a=>{ const b=diffBand(a.rate); if(byBand[b]){ byBand[b].a++; a.ok&&byBand[b].c++; } });
+  // 来源维度
+  const bySrc={};
+  atts.forEach(a=>{ const k=(a.src||'未知').replace(/·.+$/,''); (bySrc[k]=bySrc[k]||{a:0,c:0}); bySrc[k].a++; a.ok&&bySrc[k].c++; });
+  // 用时分析（每题平均秒数，分对/错）
+  const durOk=atts.filter(a=>a.ok&&a.dur>0).map(a=>a.dur), durBad=atts.filter(a=>!a.ok&&a.dur>0).map(a=>a.dur);
+  const avg=arr=>arr.length? Math.round(arr.reduce((s,x)=>s+x,0)/arr.length) : 0;
+  // 近14天趋势（用 daily 数据）
+  const trend=store.stats.daily.slice(-14);
+  const modAcc=Object.entries(byMod).map(([m,s])=>({m, n:s.a, acc:Math.round(s.c/s.a*100)}));
+  const weakestMod=modAcc.length? [...modAcc].sort((a,b)=>a.acc-b.acc)[0] : null;
+  const topWeak=[];  // 全局薄弱考点 top8
+  MODS.forEach(m=>{ weakPoints(m).slice(0,3).forEach(w=>topWeak.push({...w, mod:m})); });
+  topWeak.sort((a,b)=>a.acc-b.acc);
+  V.innerHTML=`
+  <div class="card"><h3><span class="dot"></span>📊 能力分析 · 多维画像</h3>
+    <div class="muted mb10">基于最近 ${total} 次作答的实时画像（覆盖 ${Object.keys(byMod).length} 个模块）</div>
+    <div class="hero-stats">
+      <div class="hs"><b>${acc}%</b><span>总正确率</span></div>
+      <div class="hs"><b>${total}</b><span>作答次数</span></div>
+      <div class="hs"><b>${avg(durOk)}s</b><span>答对均时</span></div>
+      <div class="hs"><b>${avg(durBad)}s</b><span>答错均时</span></div>
+    </div>
+    ${weakestMod? `<div class="muted mt8">⚠️ 当前最薄弱模块：<b style="color:var(--gold)">${MOD_ICO[weakestMod.m]} ${weakestMod.m}</b>（${weakestMod.acc}%）——建议优先专项突破</div>`:''}
+  </div>
+  <div class="card"><h3><span class="dot"></span>🧩 模块掌握度</h3>
+    ${modAcc.map(({m,n,acc})=>`<div class="r-mod"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${MOD_ICO[m]} ${m} <span class="muted" style="font-weight:400">(${n}题)</span></span><span style="color:${acc>=75?'var(--green)':acc>=60?'var(--gold)':'var(--red)'};font-weight:700">${acc}%</span></div>
+      <div class="rm-bar"><div class="rm-fill" style="width:${acc}%;background:${MOD_COLOR[m]}"></div></div></div>`).join('')}
+  </div>
+  <div class="card"><h3><span class="dot"></span>🎯 难度适配（按全站正确率分档）</h3>
+    <div class="muted mb10">简单/中等/较难/困难四档的正确率——如果简单档正确率低，说明基础不牢；较难档低是正常现象，困难档能到 50%+ 已属优秀</div>
+    ${BANDS.map(b=>{ const s=byBand[b]; if(!s.a) return ''; const p=Math.round(s.c/s.a*100);
+      return `<div class="r-mod"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${b} <span class="muted" style="font-weight:400">(${s.a}题)</span></span><span style="color:${p>=75?'var(--green)':p>=60?'var(--gold)':'var(--red)'};font-weight:700">${p}%</span></div>
+      <div class="rm-bar"><div class="rm-fill" style="width:${p}%;background:${p>=75?'var(--green)':p>=60?'var(--gold)':'var(--red)'}"></div></div></div>`; }).join('')}
+  </div>
+  <div class="card"><h3><span class="dot"></span>📚 来源表现（真题 vs 模考）</h3>
+    ${Object.entries(bySrc).sort((a,b)=>b[1].a-a[1].a).slice(0,6).map(([k,s])=>{ const p=Math.round(s.c/s.a*100);
+      return `<div class="r-mod"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(k)} <span class="muted" style="font-weight:400">(${s.a}题)</span></span><span style="font-weight:700">${p}%</span></div>
+      <div class="rm-bar"><div class="rm-fill" style="width:${p}%"></div></div></div>`; }).join('')}
+  </div>
+  <div class="card"><h3><span class="dot"></span>📉 薄弱考点清单（按正确率升序）</h3>
+    <div class="muted mb10">作答 ≥2 次且正确率 < 70% 的考点——智能组卷会优先补强这些考点</div>
+    ${topWeak.slice(0,10).map((w,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px dashed var(--line)">
+      <span><b>${i+1}.</b> ${MOD_ICO[w.mod]} ${esc(w.point)} <span class="muted" style="font-size:12px">(${w.n}次)</span></span>
+      <span style="color:${w.acc>=60?'var(--gold)':'var(--red)'};font-weight:700">${w.acc}%</span></div>`).join('')||'<div class="muted">暂无（继续刷题积累数据）</div>'}
+    <div class="btn-row"><button class="btn primary" onclick="smartQuiz()">🎯 针对薄弱点智能组卷</button></div>
+  </div>
+  <div class="card"><h3><span class="dot"></span>📈 近14天趋势</h3>
+    <div class="rate-bar">${trend.map(d=>{ const p=d.answered? Math.round(d.correct/d.answered*100):0;
+      return `<div class="rb-col"><div class="rb-bar" style="height:${Math.max(4,p*0.8)}px;background:${p>=75?'var(--green)':p>=50?'var(--gold)':'var(--red)'}"></div><div class="rb-day">${d.date.slice(5).replace('-','/')}</div><div class="rb-num">${p}%</div></div>`;}).join('')}</div>
+  </div>`;
+}
 
 /* ---------- 数据操作 ---------- */
-function recordResult(q, picked, correct){
+function recordResult(q, picked, correct, durSec){
   store.stats.answered++; correct && store.stats.correct++;
   const bm = store.stats.byMod[q.mod] = store.stats.byMod[q.mod]||{answered:0,correct:0};
   bm.answered++; correct && bm.correct++;
@@ -73,6 +194,7 @@ function recordResult(q, picked, correct){
   const td=store.stats.daily; const last=td[td.length-1];
   if(last && last.date===today()){ last.answered++; correct&&last.correct++; } else td.push({date:today(),answered:1,correct:correct?1:0});
   if(td.length>60) td.shift();
+  logAttempt(q, picked, correct, durSec);   // C1 逐题日志
   save();
 }
 function streakDays(){
@@ -99,7 +221,12 @@ function reviewDue(){
 
 /* ---------- 视图路由 ---------- */
 const VIEWS=['dashboard','practice','daily','exam','wrongbook','shenlun','more'];
-function switchTab(v){ VIEWS.forEach(x=>{ $$(`.tab[data-view="${x}"]`)[0].classList.toggle('active', x===v); }); renderView(v); }
+function switchTab(v){
+  const needsBank=['practice','daily','exam','wrongbook'].includes(v);
+  if(needsBank && requireFullBank(()=>switchTab(v))) return;
+  VIEWS.forEach(x=>{ const el=$$(`.tab[data-view="${x}"]`)[0]; if(el) el.classList.toggle('active', x===v); });
+  renderView(v);
+}
 function renderView(v){
   $('#streakBadge').innerHTML=`🔥 <b>${streakDays()}</b>天`;
   const map={dashboard:renderDash,practice:renderPractice,daily:renderDaily,exam:renderExamConfig,wrongbook:renderWrong,shenlun:renderShenlun,more:renderMore};
@@ -128,6 +255,9 @@ function renderDash(){
     <button class="gb" onclick="quickStart('随机刷题')"><span class="gi">🎲</span><span class="gt">随机刷题</span></button>
     <button class="gb" onclick="quickStart('错题重练')"><span class="gi">🔁</span><span class="gt">错题重练</span></button>
     <button class="gb" onclick="quickStart('模拟考试')"><span class="gi">⏱️</span><span class="gt">模拟考试</span></button>
+    <button class="gb" onclick="switchTab('exam')"><span class="gi">🧩</span><span class="gt">智能组卷</span></button>
+    <button class="gb" onclick="renderFillback()"><span class="gi">📥</span><span class="gt">答案回填</span></button>
+    <button class="gb" onclick="renderAnalysis()"><span class="gi">📊</span><span class="gt">能力分析</span></button>
   </div>
   <div class="card">
     <h3><span class="dot"></span>模块掌握度</h3>
@@ -162,6 +292,7 @@ function last14Bars(){
   return html;
 }
 function quickStart(which){
+  if(requireFullBank(()=>quickStart(which))) return;
   if(which==='每日一练') startQuiz(makeDaily(),'每日一练 · '+today());
   else if(which==='随机刷题') startQuiz(shuffle(allQuestions()).slice(0,10),'随机刷题 10 题');
   else if(which==='错题重练'){ const due=reviewDue(); const list=due.length?due:wrongList();
@@ -188,10 +319,10 @@ function renderPractice(){
     </div>
   </div>
   <div class="card"><h3><span class="dot"></span>🔍 题库检索</h3>
-    <div class="muted mb10">按关键词/考点/来源/正确率筛选全库 40000+ 题，支持练习与导出</div>
+    <div class="muted mb10">按关键词/考点/来源/正确率筛选全库 ${allQuestions().length.toLocaleString()} 题，支持练习与导出</div>
     <div class="search-grid">
-      <input id="searchKw" placeholder="关键词（题干/选项/解析）" oninput="doSearch()">
-      <input id="searchPoint" placeholder="考点关键词（如 逻辑推理/比重）" oninput="doSearch()">
+      <input id="searchKw" placeholder="关键词（题干/选项/解析）" oninput="searchDebounced()">
+      <input id="searchPoint" placeholder="考点关键词（如 逻辑推理/比重）" oninput="searchDebounced()">
       <select id="searchSrc" onchange="doSearch()">
         <option value="">全部来源</option><option>国考</option><option>省考</option><option>模考</option><option>原创</option><option>精选</option>
       </select>
@@ -242,6 +373,12 @@ function qTagHtml(q){
 
 /* ---------- 题库检索 ---------- */
 let __lastSearch=[];
+const runSearchDebounced=debounce(()=>setTimeout(()=>doSearch(),0),320);
+function searchDebounced(){
+  const box=$('#searchResults');
+  if(box) box.innerHTML='<div class="muted search-busy">正在检索 15 万题…</div>';
+  runSearchDebounced();
+}
 function doSearch(){
   const kw=($('#searchKw')?.value||'').trim().toLowerCase();
   const pt=($('#searchPoint')?.value||'').trim().toLowerCase();
@@ -257,7 +394,7 @@ function doSearch(){
       if(src==='省考'&&!s.includes('省考')) return false;
       if(src==='模考'&&!s.includes('模考')) return false;
       if(src==='原创'&&!String(q.tag||'').includes('原创')) return false;
-      if(src==='精选'&&String(q.tag||'').includes('精选')) return false;
+      if(src==='精选'&&!String(q.tag||'').includes('精选')) return false;
     }
     if(rate){
       const r=parseFloat(qRate(q));
@@ -330,7 +467,7 @@ function printFiltered(){
   <h1>📘 上岸通 · 题目与解析（${list.length} 题）</h1>
   <p style="text-align:center;color:#888">生成时间：${new Date().toLocaleString()}</p>
   ${list.map((q,i)=>`<div class="q"><div class="no">${i+1}. [${q.mod}] ${q.type}${q.multi?'（多选）':''}</div>
-    <div class="tag" style="background:#e8f0fe;color:#3d7edb">${esc(qSource(q)||'未标注')}</div>${qRate(q)?`<div class="tag" style="background:#fdf3e2;color:#e0962f">正确率 ${qRate(q)}%</div>`:''}${qPoints(q)?`<div class="tag" style="background:#fdeaea;color:#d96a4f">${esc(qPoints(q))}</div>`:''}
+    <div class="tag" style="background:#e8f0fe;color:#3d7edb">${esc(srcLine(q)||qSource(q)||'未标注')}</div>${qRate(q)?`<div class="tag" style="background:#fdf3e2;color:#e0962f">正确率 ${qRate(q)}%</div>`:''}${qPoints(q)?`<div class="tag" style="background:#fdeaea;color:#d96a4f">${esc(qPoints(q))}</div>`:''}
     <div class="stem">${esc(q.stem).replace(/\[图(\d+)\]/g,'[图片]')}</div>
     ${q.options.map((o,j)=>`<div class="opt">${'ABCD'[j]}. ${esc(o)}</div>`).join('')}
     <div class="ans">✅ 答案：${q.multi?q.answer:('ABCD'[q.answer])}</div>
@@ -369,6 +506,9 @@ function renderCustomQuiz(){
       </select></div>
     <div class="field"><label>题目范围</label>
       <select id="pcScope"><option value="all">全部题库（含解析）</option><option value="真题">仅真题（国考/省考）</option><option value="模考">仅模考题</option></select></div>
+    <div class="field"><label>导出样式 <span class="muted">（全真模式=真题卷版式，隐藏来源注明/正确率，模拟真实考场；练习模式=每题标注详细来源与难度）</span></label>
+      <label class="switch-inline"><input type="checkbox" id="pcFullReal" checked> <b>全真模式</b>（隐藏来源、模拟考场）</label>
+    </div>
     <div id="pcMods"></div>
     <div class="btn-row">
       <button class="btn primary" onclick="buildPaper()">📝 生成试卷</button>
@@ -392,11 +532,16 @@ function pcTotal(){
   document.querySelectorAll('.pc-num').forEach(i=>t+=+i.value||0);
   $('#pcTotalNum').textContent=t;
 }
+function selectedPaperMinutes(){
+  const name=$('#pcType')?.value||'';
+  return (PAPER_CONFIGS[name]&&PAPER_CONFIGS[name].time)||120;
+}
 function buildPaper(){
   const qs=paperQuestions();
   if(!qs.length){ toast('所选范围内题目不足，换个范围'); return; }
-  __paperCfg={list:qs, time:120};
-  startQuiz(qs, '🎯 自定义卷 · '+qs.length+'题（'+timeStr(120)+'）');
+  const minutes=selectedPaperMinutes();
+  __paperCfg={list:qs, time:minutes};
+  startQuiz(qs, `🎯 ${$('#pcType')?.value||'自定义卷'} · ${qs.length}题（${minutes}分钟）`, minutes*60);
 }
 function buildPaperAndPrint(){
   const qs=paperQuestions();
@@ -412,19 +557,167 @@ function paperQuestions(){
     let pool=QUESTION_BANK[mod]||[];
     if(scope==='真题') pool=pool.filter(q=>{const s=qSource(q);return s.includes('国考')||s.includes('省考');});
     if(scope==='模考') pool=pool.filter(q=>qSource(q).includes('模考'));
-    out.push(...shuffle(pool).slice(0,n));
+    out.push(...shuffle(pool).slice(0,n).map(q=>q.mod?q:{...q,mod}));
   });
   return out;
 }
 function timeStr(sec){ return Math.floor(sec/60)+'分'+(sec%60?sec%60+'秒':''); }
 
-/* ---------- 真题卷格式 PDF 导出 ---------- */
+/* ---------- 打印卷注册 + 答案回填（打印→做题→回填判卷闭环） ---------- */
+const PAPER_KEY='shangan_papers_v1';
+function loadPapers(){ try{ return JSON.parse(localStorage.getItem(PAPER_KEY))||{}; }catch(e){ return {}; } }
+function savePapers(p){ try{ localStorage.setItem(PAPER_KEY, JSON.stringify(p)); }catch(e){ toast('本地存储已满，请先清理旧试卷'); } }
+function registerPaper(title, qs){
+  /* 导出 PDF 时注册一份卷，返回回填码；题目只存判卷所需的摘要 */
+  const ps=loadPapers();
+  const d=new Date();
+  let id;
+  do{ id=`SAT-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}-${Math.floor(Math.random()*9000+1000)}`; }while(ps[id]);
+  ps[id]={
+    title, ts:Date.now(), n:qs.length,
+    // 单选 ans=数字下标；多选 ans=字母串（如 "AB"）
+    qs: qs.map((q,i)=>({i:i+1, id:q.id, mod:q.mod, ans:q.multi?String(q.answer):q.answer, multi:!!q.multi})),
+  };
+  savePapers(ps);
+  return id;
+}
+function renderFillback(){
+  const V=$('#view');
+  const ps=loadPapers();
+  const list=Object.entries(ps).sort((a,b)=>b[1].ts-a[1].ts);
+  V.innerHTML=`
+  <div class="card"><h3><span class="dot"></span>📥 答案回填</h3>
+    <div class="muted mb10">打印了真题卷？做完后在答题卡上涂卡，回到这里输入卷面右上角的<b>回填码</b>，把答案逐题填进来——自动判卷、记录成绩与错题，与线上做题数据合并分析。</div>
+    <div class="field"><label>回填码（试卷右上角 🔑 处，如 SAT-20260817-1234）</label>
+      <input id="fbCode" placeholder="SAT-20260817-1234" onkeydown="if(event.key==='Enter')loadFillPaper()"></div>
+    <button class="btn primary" onclick="loadFillPaper()">📖 载入试卷</button>
+    <div id="fbBody"></div>
+  </div>
+  <div class="card"><h3><span class="dot"></span>🗂 已导出的试卷（${list.length}）</h3>
+    <div class="muted mb10">点击可回填，或删除释放空间</div>
+    ${list.length? list.map(([id,p])=>`
+      <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--line)">
+        <div><b>${esc(p.title)}</b> · ${p.n} 题<br><span class="muted" style="font-size:12px">${new Date(p.ts).toLocaleString()} · ${id}</span></div>
+        <div><button class="btn sm" onclick="loadFillPaper('${id}')">回填</button> <button class="btn sm danger" onclick="delPaper('${id}')">删</button></div>
+      </div>`).join('') : '<div class="muted">还没有导出的试卷——去「智能组卷」生成并导出 PDF 吧</div>'}
+  </div>`;
+}
+function delPaper(id){
+  const ps=loadPapers(); delete ps[id]; savePapers(ps); renderFillback(); toast('已删除');
+}
+function loadFillPaper(id){
+  const code=(id||$('#fbCode').value||'').trim().toUpperCase();
+  if(!code){ toast('请输入回填码'); return; }
+  const ps=loadPapers();
+  const p=ps[code];
+  if(!p){ toast('未找到该试卷，请检查回填码'); return; }
+  const answers=JSON.parse(localStorage.getItem('shangan_fill_'+code)||'{}');
+  $('#fbBody').innerHTML=`
+    <div class="mt12" style="border-top:2px solid var(--line);padding-top:12px">
+      <h4>📝 ${esc(p.title)} · ${p.n} 题</h4>
+      <div class="muted mb10">按题号填入答案（单选填 A/B/C/D，多选填如 AB）。已填 ${Object.keys(answers).length} 题。</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px">
+        ${p.qs.map(q=>`<div style="border:1px solid var(--line);border-radius:10px;padding:6px 8px;text-align:center">
+          <div style="font-size:11px;color:#888">${q.i}. ${q.mod.slice(0,2)}${q.multi?'·多选':''}</div>
+          <input data-q="${q.i}" value="${answers[q.i]||''}" placeholder="-" style="width:100%;text-align:center;border:1px solid var(--line);border-radius:8px;padding:4px;margin-top:2px;font-weight:700" oninput="saveFill('${code}')"></div>`).join('')}
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="submitFill('${code}')">✅ 交卷判分</button>
+        <button class="btn" onclick="renderFillback()">返回</button>
+      </div>
+      <div id="fbResult" class="mt12"></div>
+    </div>`;
+}
+function saveFill(code){
+  const vals={};
+  $$('#fbBody input[data-q]').forEach(i=>{ if(i.value.trim()) vals[i.dataset.q]=i.value.trim().toUpperCase(); });
+  try{ localStorage.setItem('shangan_fill_'+code, JSON.stringify(vals)); }catch(e){}
+}
+function submitFill(code){
+  const ps=loadPapers(); const p=ps[code];
+  if(!p) return;
+  const vals=JSON.parse(localStorage.getItem('shangan_fill_'+code)||'{}');
+  let filled=0, correct=0;
+  const detail=p.qs.map(q=>{
+    const raw=(vals[q.i]||'').trim().toUpperCase();
+    if(!raw){ return {...q, filled:false}; }
+    filled++;
+    // 归一化用户答案 → 下标/下标数组
+    let userAns;
+    if(q.multi){ userAns=raw.split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0).sort().join(','); }
+    else { const idx='ABCD'.indexOf(raw); userAns=idx>=0? idx : -1; }
+    let ok=false;
+    if(q.multi){ ok = userAns===String(q.ans).split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0).sort().join(','); }
+    else { ok = userAns===q.ans; }
+    if(ok) correct++;
+    return {...q, filled:true, ok, userRaw:raw};
+  });
+  if(!filled){ toast('至少填一题再交卷'); return; }
+  // 逐题记入学习数据（与线上做题同一套 recordResult 逻辑）
+  detail.forEach(d=>{
+    if(!d.filled) return;
+    const q=allQuestions().find(x=>x.id===d.id);
+    if(!q) return;
+    recordResult(q, d.multi? (d.userRaw.split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0)) : ('ABCD'.indexOf(d.userRaw)), d.ok);
+  });
+  const acc=Math.round(correct/filled*100);
+  // 按模块统计
+  const byMod={};
+  detail.filter(d=>d.filled).forEach(d=>{ byMod[d.mod]=byMod[d.mod]||{a:0,c:0}; byMod[d.mod].a++; d.ok&&byMod[d.mod].c++; });
+  $('#fbResult').innerHTML=`
+    <div class="card" style="border:2px solid var(--green)">
+      <h3>🎉 判卷完成：${correct}/${filled} 正确（${acc}%）</h3>
+      <div class="muted mb10">成绩已并入学习数据（正确率、错题本、打卡、每日统计）。</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">
+        ${Object.entries(byMod).map(([m,s])=>`<div class="hs"><b>${MOD_ICO[m]} ${s.c}/${s.a}</b><span>${m}</span></div>`).join('')}
+      </div>
+      <details class="mt8"><summary>逐题详情</summary>
+        ${detail.map(d=>`<div style="padding:3px 0;border-bottom:1px dashed #eee">${d.i}. ${d.filled? (d.ok?'✅':'❌')+' '+d.userRaw : '— 未填'} <span class="muted">${esc(d.mod)}</span></div>`).join('')}
+      </details>
+    </div>`;
+  // 判完后删除试卷记录，释放空间
+  // 保留，用户可再回看；空间由 delPaper 管理
+}
+
+/* ---------- 真题卷格式 PDF 导出 v2（全真/练习双模式） ---------- */
+function srcText(q){
+  /* 详细来源注明：优先结构化 src，兜底旧 tag */
+  const s=q.src||{};
+  if(s.name) return s.name;
+  return String(q.tag||'');
+}
+function srcNo(q){ return q.num? `第${q.num}题` : ''; }
+function srcLine(q){
+  /* 题干前的来源注明行（练习模式） */
+  const s=q.src||{};
+  let t=srcText(q);
+  const no=srcNo(q);
+  let extra=[];
+  if(s.year) extra.push(s.year);
+  if(s.exam) extra.push(s.exam);
+  if(s.province) extra.push(s.province);
+  if(s.category&&!s.name) extra.push(s.category);
+  const src=(extra.length? extra.join('·') : t) + (no? '·'+no : '');
+  return src;
+}
 function printPaper(qs){
   const w=window.open('','_blank');
   const cfgName=$('#pcType')?.value||'模拟卷';
+  const fullReal=$('#pcFullReal')?.checked!==false;
   const now=new Date();
   const dateStr=`${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${cfgName}模拟卷</title>
+  const paperMinutes=selectedPaperMinutes();
+  // 注册打印卷 → 回填码（供答案回填判卷）
+  const paperId=registerPaper(cfgName, qs);
+  // 每题来源行（练习模式）
+  const srcNote=q=>{
+    if(fullReal) return '';
+    const s=srcLine(q);
+    return s? `<div class="src-note">【来源：${esc(s)}】${qRate(q)?` 正确率 ${qRate(q)}%`:''}${qPoints(q)?` 考点：${esc(qPoints(q).split(' ')[0])}`:''}</div>` : '';
+  };
+  // 按模块分组（保持卷面顺序）
+  const parts=MOD_ORDER.filter(m=>qs.some(q=>q.mod===m)).map(m=>({mod:m, list:qs.filter(q=>q.mod===m)}));
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${cfgName}${fullReal?'·全真模拟卷':'·练习卷'}</title>
   <style>
   @page{size:A4;margin:18mm 16mm}
   body{font-family:SimSun,'Songti SC','Microsoft YaHei',serif;color:#000;font-size:12px;line-height:1.7}
@@ -434,22 +727,29 @@ function printPaper(qs){
   .notice{border:1.5px solid #000;padding:8px 12px;margin-bottom:14px;font-size:11px}
   .notice b{display:block;text-align:center;margin-bottom:4px;font-size:12px}
   .part{font-weight:700;font-size:14px;margin:16px 0 8px;padding:4px 10px;background:#f2f4f7;border-left:4px solid #000}
+  .part-dir{font-size:11px;color:#333;margin:-4px 0 10px 4px}
   .q{margin-bottom:14px;page-break-inside:avoid}
   .q .no{font-weight:700}
   .q .stem{display:inline;margin-left:4px}
   .q .opts{margin:3px 0 3px 22px}
   .q .opts div{margin:1px 0}
+  .src-note{font-size:10px;color:#8a6d3b;background:#fdf6ec;border-left:3px solid #d4a017;padding:2px 6px;margin-bottom:6px}
   .material{background:#f8f9fa;border:1px dashed #999;padding:8px 10px;margin-bottom:10px;font-size:11.5px;white-space:pre-wrap}
   .ans-page{page-break-before:always}
   .ans-table{width:100%;border-collapse:collapse;margin-top:8px}
   .ans-table td,.ans-table th{border:1px solid #000;padding:4px;text-align:center;font-size:11px}
   .ans-table .ahead{background:#f2f4f7;font-weight:700}
+  .card-page{page-break-before:always}
+  .card{width:100%;border-collapse:collapse;margin-top:8px}
+  .card td,.card th{border:1px solid #000;padding:3px;text-align:center;font-size:10px}
+  .card .chunk{border:1px solid #000}
   .foot{text-align:center;color:#666;margin-top:20px;font-size:10px}
   </style></head><body>
   <div class="head">
-    <h1>${cfgName}·全真模拟卷</h1>
-    <div class="sub">《行政职业能力测验》 · 作答时限 120 分钟 · 满分 100 分</div>
-    <div class="sub">上岸通 智能组卷 · ${dateStr} · 共 ${qs.length} 题</div>
+    <h1>${cfgName}${fullReal?'·全真模拟卷':'·练习卷'}</h1>
+    <div class="sub">《行政职业能力测验》 · 作答时限 ${paperMinutes} 分钟 · 满分 100 分</div>
+    <div class="sub">上岸通 智能组卷 · ${dateStr} · 共 ${qs.length} 题${fullReal?'':' · 练习模式（含来源标注）'}</div>
+    ${fullReal?`<div class="sub" style="color:#c0392b">🔑 答案回填码：<b>${paperId}</b>（做完后在上岸通「答案回填」输入此码，自动判卷并记录学习数据）</div>`:''}
   </div>
   <div class="notice"><b>注意事项</b>
   1. 本试卷为行测模拟题，请用 2B 铅笔在答题卡上作答，在题本上作答一律无效。<br>
@@ -457,28 +757,42 @@ function printPaper(qs){
   3. 监考人员宣布考试结束时，应立即停止答题，将题本、答题卡翻放桌上。<br>
   4. 答题前请认真阅读答题卡上的注意事项，按规定填涂姓名与准考证号。
   </div>
-  ${MOD_ORDER.filter(m=>qs.some(q=>q.mod===m)).map(m=>{
-    const part=qs.filter(q=>q.mod===m);
-    return `<div class="part">${MOD_ICO[m]} ${m}（${part.length} 题）</div>`+part.map((q,i)=>{
+  ${parts.map(p=>{
+    return `<div class="part">${MOD_ICO[p.mod]} ${p.mod}（${p.list.length} 题）</div>
+    <div class="part-dir">${p.mod==='资料分析'?'本部分题目提供材料，请根据材料内容作答。':p.mod==='言语理解'?'本部分包括表达与理解两方面的内容，请根据题目要求，在四个选项中选出一个最恰当的答案。':p.mod==='判断推理'?'本部分包括图形推理、定义判断、类比推理与逻辑判断等内容，请根据题目要求作答。':p.mod==='数量关系'?'在这部分试题中，每道题呈现一段表述数字关系的文字，要求你迅速、准确地计算出答案。':p.mod==='常识判断'?'本部分涵盖政治、经济、法律、人文、科技等方面的知识，请根据题目要求作答。':p.mod==='政治理论'?'本部分主要测查报考者学习理解掌握党的创新理论及党和国家方针政策的情况。':'请根据题目要求作答。'}</div>`
+    +p.list.map(q=>{
       const no=qs.indexOf(q)+1;
       const mat=q.mat||'';
       return (mat?`<div class="material">${esc(mat).replace(/\[图\]/g,'（图）')}</div>`:'')+
-        `<div class="q"><span class="no">${no}.</span><div class="stem">${esc(q.stem).replace(/\[图(\d+)\]/g,'（图）')}</div>
+        `<div class="q">${srcNote(q)}<span class="no">${no}.</span><div class="stem">${esc(q.stem).replace(/\[图(\d+)\]/g,'（图）')}</div>
         <div class="opts">${q.options.map((o,j)=>`<div>${'ABCD'[j]}. ${esc(o)}</div>`).join('')}</div></div>`;
     }).join('');
   }).join('')}
+  <div class="card-page"><div class="part">📝 答题卡（可打印后涂卡，做完扫码/回填线上判卷）</div>
+  <table class="card">
+    ${Array.from({length:Math.ceil(qs.length/10)},(_,row)=>{
+      const cols=Array.from({length:10},(_,c)=>{const n=row*10+c+1; if(n>qs.length) return '<td></td>';
+        return `<td class="chunk"><b>${n}</b><br><span style="font-size:9px">A B C D</span></td>`;}).join('');
+      return `<tr><td class="ahead" style="width:26px">${row+1}</td>${cols}</tr>`;
+    }).join('')}
+  </table>
+  <div class="foot">打印后可在上方涂卡；做完后用「上岸通 · 答案回填」扫码或拍照回填，自动判卷并记录个人数据</div></div>
   <div class="ans-page"><div class="part">📋 参考答案与解析（${qs.length} 题）</div>
-  ${qs.map((q,i)=>`<div class="q"><b>${i+1}. ${q.mod} · ${q.type}</b> 答案：<b>${q.multi?q.answer:('ABCD'[q.answer])}</b>${qRate(q)?`（正确率 ${qRate(q)}%）`:''}${qPoints(q)?` · 考点：${esc(qPoints(q))}`:''}<div class="material" style="border:none;background:transparent;padding:4px 0 0">${esc(q.analysis)}</div></div>`).join('')}
+  ${qs.map((q,i)=>`<div class="q"><b>${i+1}. ${q.mod} · ${q.type}</b> 答案：<b>${q.multi?q.answer:('ABCD'[q.answer])}</b>${qRate(q)?`（正确率 ${qRate(q)}%）`:''}${qPoints(q)?` · 考点：${esc(qPoints(q))}`:''}${fullReal?'':'<div style="font-size:10px;color:#8a6d3b">来源：'+esc(srcLine(q))+'</div>'}<div class="material" style="border:none;background:transparent;padding:4px 0 0">${esc(q.analysis)}</div></div>`).join('')}
   <div class="foot">本卷由上岸通智能生成，仅供学习使用 · 解析版权归原题库方所有</div></div>
   <script>window.onload=function(){setTimeout(()=>window.print(),500)}</script>
   </body></html>`);
   w.document.close();
 }
 function smartQuiz(){
-  // 按错题考点 + 模块正确率生成薄弱点练习
+  if(requireFullBank(()=>smartQuiz())) return;
+  // 按错题考点 + attempts 薄弱考点 + 模块正确率生成薄弱点练习（C2 联动）
   const wrong=Object.keys(store.wrongs).map(id=>allQuestions().find(q=>q.id===id)).filter(Boolean);
   const pointCount={};
   wrong.forEach(q=>{ const p=qPoints(q)||'未分类'; pointCount[p]=(pointCount[p]||0)+1; });
+  // C2: 从逐题日志里取薄弱考点（正确率最低的）
+  store.attempts.forEach(a=>{ if(!a.point) return; const key=a.point.split(' ')[0];
+    (pointCount[key]=pointCount[key]||0); });
   const weakPoints=Object.entries(pointCount).sort((a,b)=>b[1]-a[1]).slice(0,5).map(x=>x[0]);
   const weakMods=MODS.map(m=>{const b=store.stats.byMod[m]||{answered:0,correct:0};return {m,acc:b.answered?b.correct/b.answered:0,n:b.answered};})
     .filter(x=>x.n>=5).sort((a,b)=>a.acc-b.acc).slice(0,2).map(x=>x.m);
@@ -789,6 +1103,7 @@ function startQuiz(list,title,seconds){
 function fmtClock(sec){ return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`; }
 function renderQ(){
   const q=Q.list[Q.idx]; if(!q) return;
+  Q._qEnter=Date.now();   // C1: 记录本题进入时间（算用时）
   $('#quizProgress').textContent=`${Q.idx+1}/${Q.list.length}`;
   const chosen=Q.answers[q.id];
   const multi=!!q.multi;
@@ -863,7 +1178,8 @@ function pick(i){
     return;
   }
   Q.answers[q.id]=i;
-  recordResult(q,i,i===q.answer);
+  const dur=Math.max(0, Math.round((Date.now()-(Q._qEnter||Date.now()))/1000));
+  recordResult(q,i,i===q.answer,dur);
   renderQ();
 }
 function submitMulti(){
@@ -873,7 +1189,8 @@ function submitMulti(){
   if(!sel.length){ toast('请至少选择一个选项'); return; }
   Q.answers[q.id]=sel;
   Q._multiSel=null;
-  recordResult(q,sel,isCorrect(q,sel));
+  const dur=Math.max(0, Math.round((Date.now()-(Q._qEnter||Date.now()))/1000));
+  recordResult(q,sel,isCorrect(q,sel),dur);
   renderQ();
 }
 function nextQ(){ if(Q.idx<Q.list.length-1){ Q.idx++; Q._multiSel=null; renderQ(); } else finishQuiz(); }
@@ -948,6 +1265,7 @@ function renderReview(){
 function reviewNav(dir){ Q.idx+=dir; if(Q.idx<0)Q.idx=0; if(Q.idx>=Q.list.length)Q.idx=Q.list.length-1; renderReview(); }
 document.addEventListener('keydown',e=>{
   if($('#quizLayer').classList.contains('hidden')) return;
+  if(e.key==='Escape'){ $('#quizClose').click(); return; }
   if(e.key>='1'&&e.key<='4') pick(+e.key-1);
   else if(e.key==='Enter'){ const q=Q.list[Q.idx]; if(q&&q.multi&&Q.answers[q.id]===undefined) submitMulti(); }
   else if(e.key==='ArrowRight') Q.mode==='review'?reviewNav(1):nextQ();
@@ -974,6 +1292,10 @@ window.renderWrongByMod=renderWrongByMod; window.renderExamConfig=renderExamConf
 window.renderExamCustom=renderExamCustom; window.examCustom=examCustom; window.examQuick=examQuick;
 window.renderCustomQuiz=renderCustomQuiz; window.applyPaperCfg=applyPaperCfg; window.pcTotal=pcTotal;
 window.buildPaper=buildPaper; window.buildPaperAndPrint=buildPaperAndPrint; window.smartQuiz=smartQuiz;
+window.renderFillback=renderFillback; window.loadFillPaper=loadFillPaper; window.delPaper=delPaper;
+window.saveFill=saveFill; window.submitFill=submitFill; window.registerPaper=registerPaper;
+window.renderAnalysis=renderAnalysis; window.smartQuiz=smartQuiz;
+window.doSearch=doSearch; window.searchDebounced=searchDebounced; window.exportFiltered=exportFiltered; window.printFiltered=printFiltered;
 window.exportData=exportData; window.importData=importData; window.confirmReset=confirmReset;
 window.openUrl=(u)=>{ window.open(u,'_blank'); };
 window.toggleReview=toggleReview; window.pomoToggle=pomoToggle; window.pomoReset=pomoReset;

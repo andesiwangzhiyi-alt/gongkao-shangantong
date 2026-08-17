@@ -181,6 +181,8 @@ input,textarea,select{font-family:inherit;font-size:14px}
 /* ---- 表单 ---- */
 .field{margin-bottom:12px}
 .field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--ink-2)}
+.switch-inline{display:flex;align-items:center;gap:8px;font-weight:500 !important;margin-bottom:0 !important;cursor:pointer;user-select:none}
+.switch-inline input{width:auto !important;accent-color:var(--navy-2);transform:scale(1.15)}
 .field input,.field textarea,.field select{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;outline:none;background:#fbfcfe}
 .field input:focus,.field textarea:focus{border-color:var(--navy-2)}
 
@@ -225,6 +227,21 @@ input,textarea,select{font-family:inherit;font-size:14px}
   .mod-list{grid-template-columns:repeat(3,1fr)}
   .stat-grid{grid-template-columns:repeat(4,1fr)}
   .quiz-body{padding:24px}
+}
+/* v2.0 移动端：7 项导航仍保持可点，选项/底栏达到触摸热区标准 */
+@media (max-width:380px){
+  .tab{font-size:9px;padding:7px 0 9px;min-width:0}
+  .tab-ico{font-size:17px}
+  .tab.active::before{width:26px}
+  .brand-name em{display:none}
+  .grid-btns{grid-template-columns:repeat(3,1fr)}
+  .quiz-foot{gap:6px;padding-left:8px;padding-right:8px}
+  .quiz-foot .btn{padding:10px 7px;font-size:12px;min-height:44px}
+}
+@media (pointer:coarse){
+  .q-opt{min-height:52px;padding:13px 12px;touch-action:manipulation}
+  .tab{min-height:52px;touch-action:manipulation}
+  button,.btn{touch-action:manipulation}
 }
 
 /* ============================================================
