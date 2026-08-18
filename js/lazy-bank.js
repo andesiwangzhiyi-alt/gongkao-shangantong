@@ -34,12 +34,21 @@
   }
 
   async function loadAll(){
-    const r = await fetch('js/bank/questions6-manifest.json');
-    if(!r.ok) throw new Error(`题库 manifest HTTP ${r.status}`);
-    const manifest = await r.json();
-    const chunks = manifest.chunks || [];
+    const [r1, r2] = await Promise.all([
+      fetch('js/bank/questions6-manifest.json'),
+      fetch('js/bank/questions9-manifest.json')
+    ]);
+    if(!r1.ok) throw new Error(`题库 manifest HTTP ${r1.status}`);
+    const m1 = await r1.json();
+    let chunks = m1.chunks || [];
+    let total = m1.total || 0;
+    if(r2.ok){
+      const m2 = await r2.json();
+      chunks = chunks.concat(m2.chunks || []);
+      total += m2.total || 0;
+    }
     status.totalChunks = chunks.length;
-    status.totalQuestions = manifest.total || 0;
+    status.totalQuestions = total;
     // 每批 3 个：兼顾网络并行和主线程 JSON/JS 解析压力
     for(let i=0; i<chunks.length; i+=3){
       await Promise.all(chunks.slice(i,i+3).map(x=>loadScript(x.file)));
