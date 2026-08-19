@@ -1,241 +1,240 @@
 {
-  "version": 2,
-  "total": 140005,
-  "chunkSize": 4000,
-  "chunks": [
-    {
-      "file": "js/bank/questions6_001.js",
-      "module": "常识判断",
-      "count": 4000,
-      "bytes": 10812530
-    },
-    {
-      "file": "js/bank/questions6_002.js",
-      "module": "常识判断",
-      "count": 4000,
-      "bytes": 11252199
-    },
-    {
-      "file": "js/bank/questions6_003.js",
-      "module": "常识判断",
-      "count": 4000,
-      "bytes": 11479993
-    },
-    {
-      "file": "js/bank/questions6_004.js",
-      "module": "常识判断",
-      "count": 4000,
-      "bytes": 11556608
-    },
-    {
-      "file": "js/bank/questions6_005.js",
-      "module": "常识判断",
-      "count": 4000,
-      "bytes": 10529956
-    },
-    {
-      "file": "js/bank/questions6_006.js",
-      "module": "常识判断",
-      "count": 4000,
-      "bytes": 9483058
-    },
-    {
-      "file": "js/bank/questions6_007.js",
-      "module": "常识判断",
-      "count": 4000,
-      "bytes": 10599491
-    },
-    {
-      "file": "js/bank/questions6_008.js",
-      "module": "常识判断",
-      "count": 4000,
-      "bytes": 10640789
-    },
-    {
-      "file": "js/bank/questions6_009.js",
-      "module": "常识判断",
-      "count": 1443,
-      "bytes": 3926719
-    },
-    {
-      "file": "js/bank/questions6_010.js",
-      "module": "言语理解",
-      "count": 4000,
-      "bytes": 11185326
-    },
-    {
-      "file": "js/bank/questions6_011.js",
-      "module": "言语理解",
-      "count": 4000,
-      "bytes": 11080079
-    },
-    {
-      "file": "js/bank/questions6_012.js",
-      "module": "言语理解",
-      "count": 4000,
-      "bytes": 11690830
-    },
-    {
-      "file": "js/bank/questions6_013.js",
-      "module": "言语理解",
-      "count": 4000,
-      "bytes": 10882366
-    },
-    {
-      "file": "js/bank/questions6_014.js",
-      "module": "言语理解",
-      "count": 4000,
-      "bytes": 9355208
-    },
-    {
-      "file": "js/bank/questions6_015.js",
-      "module": "言语理解",
-      "count": 4000,
-      "bytes": 10252625
-    },
-    {
-      "file": "js/bank/questions6_016.js",
-      "module": "言语理解",
-      "count": 2203,
-      "bytes": 5767914
-    },
-    {
-      "file": "js/bank/questions6_017.js",
-      "module": "数量关系",
-      "count": 4000,
-      "bytes": 12281912
-    },
-    {
-      "file": "js/bank/questions6_018.js",
-      "module": "数量关系",
-      "count": 4000,
-      "bytes": 8500865
-    },
-    {
-      "file": "js/bank/questions6_019.js",
-      "module": "数量关系",
-      "count": 817,
-      "bytes": 1421355
-    },
-    {
-      "file": "js/bank/questions6_020.js",
-      "module": "判断推理",
-      "count": 4000,
-      "bytes": 11196408
-    },
-    {
-      "file": "js/bank/questions6_021.js",
-      "module": "判断推理",
-      "count": 4000,
-      "bytes": 11102525
-    },
-    {
-      "file": "js/bank/questions6_022.js",
-      "module": "判断推理",
-      "count": 4000,
-      "bytes": 11818409
-    },
-    {
-      "file": "js/bank/questions6_023.js",
-      "module": "判断推理",
-      "count": 4000,
-      "bytes": 12070344
-    },
-    {
-      "file": "js/bank/questions6_024.js",
-      "module": "判断推理",
-      "count": 4000,
-      "bytes": 12214347
-    },
-    {
-      "file": "js/bank/questions6_025.js",
-      "module": "判断推理",
-      "count": 4000,
-      "bytes": 12222540
-    },
-    {
-      "file": "js/bank/questions6_026.js",
-      "module": "判断推理",
-      "count": 4000,
-      "bytes": 9395635
-    },
-    {
-      "file": "js/bank/questions6_027.js",
-      "module": "判断推理",
-      "count": 4000,
-      "bytes": 8465371
-    },
-    {
-      "file": "js/bank/questions6_028.js",
-      "module": "判断推理",
-      "count": 4000,
-      "bytes": 9147187
-    },
-    {
-      "file": "js/bank/questions6_029.js",
-      "module": "判断推理",
-      "count": 4000,
-      "bytes": 9184257
-    },
-    {
-      "file": "js/bank/questions6_030.js",
-      "module": "判断推理",
-      "count": 689,
-      "bytes": 1595659
-    },
-    {
-      "file": "js/bank/questions6_031.js",
-      "module": "资料分析",
-      "count": 4000,
-      "bytes": 9268749
-    },
-    {
-      "file": "js/bank/questions6_032.js",
-      "module": "资料分析",
-      "count": 4000,
-      "bytes": 9137751
-    },
-    {
-      "file": "js/bank/questions6_033.js",
-      "module": "资料分析",
-      "count": 4000,
-      "bytes": 9102836
-    },
-    {
-      "file": "js/bank/questions6_034.js",
-      "module": "资料分析",
-      "count": 4000,
-      "bytes": 8865758
-    },
-    {
-      "file": "js/bank/questions6_035.js",
-      "module": "资料分析",
-      "count": 4000,
-      "bytes": 8721871
-    },
-    {
-      "file": "js/bank/questions6_036.js",
-      "module": "资料分析",
-      "count": 4000,
-      "bytes": 8795927
-    },
-    {
-      "file": "js/bank/questions6_037.js",
-      "module": "资料分析",
-      "count": 324,
-      "bytes": 691319
-    },
-    {
-      "file": "js/bank/questions6_038.js",
-      "module": "政治理论",
-      "count": 4000,
-      "bytes": 11408971
-    },
-    {
-      "file": "js/bank/questions6_039.js",
-      "module": "政治理论",
-      "count": 2529,
-      "bytes": 7429484
-    }
-  ]
+ "version": 3,
+ "total": 43103,
+ "chunks": [
+  {
+   "file": "js/bank/questions6_001.js",
+   "module": "常识判断",
+   "count": 1861,
+   "bytes": 5438455
+  },
+  {
+   "file": "js/bank/questions6_002.js",
+   "module": "常识判断",
+   "count": 1803,
+   "bytes": 5772461
+  },
+  {
+   "file": "js/bank/questions6_003.js",
+   "module": "常识判断",
+   "count": 1948,
+   "bytes": 6257257
+  },
+  {
+   "file": "js/bank/questions6_004.js",
+   "module": "常识判断",
+   "count": 1927,
+   "bytes": 6303010
+  },
+  {
+   "file": "js/bank/questions6_005.js",
+   "module": "常识判断",
+   "count": 1517,
+   "bytes": 4675092
+  },
+  {
+   "file": "js/bank/questions6_006.js",
+   "module": "常识判断",
+   "count": 833,
+   "bytes": 2243362
+  },
+  {
+   "file": "js/bank/questions6_007.js",
+   "module": "常识判断",
+   "count": 1260,
+   "bytes": 3828655
+  },
+  {
+   "file": "js/bank/questions6_008.js",
+   "module": "常识判断",
+   "count": 1117,
+   "bytes": 3550397
+  },
+  {
+   "file": "js/bank/questions6_009.js",
+   "module": "常识判断",
+   "count": 355,
+   "bytes": 1206096
+  },
+  {
+   "file": "js/bank/questions6_010.js",
+   "module": "言语理解",
+   "count": 2033,
+   "bytes": 6963368
+  },
+  {
+   "file": "js/bank/questions6_011.js",
+   "module": "言语理解",
+   "count": 1912,
+   "bytes": 6888292
+  },
+  {
+   "file": "js/bank/questions6_012.js",
+   "module": "言语理解",
+   "count": 2151,
+   "bytes": 7907157
+  },
+  {
+   "file": "js/bank/questions6_013.js",
+   "module": "言语理解",
+   "count": 1983,
+   "bytes": 6723220
+  },
+  {
+   "file": "js/bank/questions6_014.js",
+   "module": "言语理解",
+   "count": 1144,
+   "bytes": 2998093
+  },
+  {
+   "file": "js/bank/questions6_015.js",
+   "module": "言语理解",
+   "count": 1404,
+   "bytes": 3768010
+  },
+  {
+   "file": "js/bank/questions6_016.js",
+   "module": "言语理解",
+   "count": 720,
+   "bytes": 1964094
+  },
+  {
+   "file": "js/bank/questions6_017.js",
+   "module": "数量关系",
+   "count": 1890,
+   "bytes": 6108684
+  },
+  {
+   "file": "js/bank/questions6_018.js",
+   "module": "数量关系",
+   "count": 872,
+   "bytes": 2486897
+  },
+  {
+   "file": "js/bank/questions6_019.js",
+   "module": "数量关系",
+   "count": 51,
+   "bytes": 102240
+  },
+  {
+   "file": "js/bank/questions6_020.js",
+   "module": "判断推理",
+   "count": 1030,
+   "bytes": 2983661
+  },
+  {
+   "file": "js/bank/questions6_021.js",
+   "module": "判断推理",
+   "count": 904,
+   "bytes": 2811247
+  },
+  {
+   "file": "js/bank/questions6_022.js",
+   "module": "判断推理",
+   "count": 1027,
+   "bytes": 3396479
+  },
+  {
+   "file": "js/bank/questions6_023.js",
+   "module": "判断推理",
+   "count": 1253,
+   "bytes": 4163221
+  },
+  {
+   "file": "js/bank/questions6_024.js",
+   "module": "判断推理",
+   "count": 1229,
+   "bytes": 4104850
+  },
+  {
+   "file": "js/bank/questions6_025.js",
+   "module": "判断推理",
+   "count": 1284,
+   "bytes": 4219525
+  },
+  {
+   "file": "js/bank/questions6_026.js",
+   "module": "判断推理",
+   "count": 475,
+   "bytes": 1530731
+  },
+  {
+   "file": "js/bank/questions6_027.js",
+   "module": "判断推理",
+   "count": 473,
+   "bytes": 1141017
+  },
+  {
+   "file": "js/bank/questions6_028.js",
+   "module": "判断推理",
+   "count": 319,
+   "bytes": 817687
+  },
+  {
+   "file": "js/bank/questions6_029.js",
+   "module": "判断推理",
+   "count": 301,
+   "bytes": 767655
+  },
+  {
+   "file": "js/bank/questions6_030.js",
+   "module": "判断推理",
+   "count": 39,
+   "bytes": 80010
+  },
+  {
+   "file": "js/bank/questions6_031.js",
+   "module": "资料分析",
+   "count": 1394,
+   "bytes": 4101980
+  },
+  {
+   "file": "js/bank/questions6_032.js",
+   "module": "资料分析",
+   "count": 1738,
+   "bytes": 4921920
+  },
+  {
+   "file": "js/bank/questions6_033.js",
+   "module": "资料分析",
+   "count": 1993,
+   "bytes": 5466170
+  },
+  {
+   "file": "js/bank/questions6_034.js",
+   "module": "资料分析",
+   "count": 870,
+   "bytes": 2362582
+  },
+  {
+   "file": "js/bank/questions6_035.js",
+   "module": "资料分析",
+   "count": 331,
+   "bytes": 858101
+  },
+  {
+   "file": "js/bank/questions6_036.js",
+   "module": "资料分析",
+   "count": 209,
+   "bytes": 610714
+  },
+  {
+   "file": "js/bank/questions6_037.js",
+   "module": "资料分析",
+   "count": 5,
+   "bytes": 12249
+  },
+  {
+   "file": "js/bank/questions6_038.js",
+   "module": "政治理论",
+   "count": 1125,
+   "bytes": 4008148
+  },
+  {
+   "file": "js/bank/questions6_039.js",
+   "module": "政治理论",
+   "count": 323,
+   "bytes": 1125593
+  }
+ ]
 }

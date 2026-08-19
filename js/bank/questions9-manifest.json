@@ -1,1 +1,84 @@
-{"total":24075,"chunks":[{"file":"js/bank/questions9_001.js"},{"file":"js/bank/questions9_002.js"},{"file":"js/bank/questions9_003.js"},{"file":"js/bank/questions9_004.js"},{"file":"js/bank/questions9_005.js"},{"file":"js/bank/questions9_006.js"},{"file":"js/bank/questions9_007.js"},{"file":"js/bank/questions9_008.js"},{"file":"js/bank/questions9_009.js"},{"file":"js/bank/questions9_010.js"},{"file":"js/bank/questions9_011.js"},{"file":"js/bank/questions9_012.js"},{"file":"js/bank/questions9_013.js"}]}
+{
+ "version": 3,
+ "total": 2010,
+ "chunks": [
+  {
+   "file": "js/bank/questions9_001.js",
+   "module": "常识判断",
+   "count": 208,
+   "bytes": 517353
+  },
+  {
+   "file": "js/bank/questions9_002.js",
+   "module": "常识判断",
+   "count": 250,
+   "bytes": 729119
+  },
+  {
+   "file": "js/bank/questions9_003.js",
+   "module": "常识判断",
+   "count": 317,
+   "bytes": 975883
+  },
+  {
+   "file": "js/bank/questions9_004.js",
+   "module": "常识判断、言语理解",
+   "count": 281,
+   "bytes": 692540
+  },
+  {
+   "file": "js/bank/questions9_005.js",
+   "module": "言语理解",
+   "count": 72,
+   "bytes": 274475
+  },
+  {
+   "file": "js/bank/questions9_006.js",
+   "module": "数量关系、言语理解",
+   "count": 140,
+   "bytes": 407668
+  },
+  {
+   "file": "js/bank/questions9_007.js",
+   "module": "判断推理、数量关系",
+   "count": 212,
+   "bytes": 745589
+  },
+  {
+   "file": "js/bank/questions9_008.js",
+   "module": "判断推理",
+   "count": 32,
+   "bytes": 90954
+  },
+  {
+   "file": "js/bank/questions9_009.js",
+   "module": "判断推理",
+   "count": 30,
+   "bytes": 104475
+  },
+  {
+   "file": "js/bank/questions9_010.js",
+   "module": "判断推理、资料分析",
+   "count": 70,
+   "bytes": 261734
+  },
+  {
+   "file": "js/bank/questions9_011.js",
+   "module": "资料分析",
+   "count": 157,
+   "bytes": 822606
+  },
+  {
+   "file": "js/bank/questions9_012.js",
+   "module": "政治理论、资料分析",
+   "count": 226,
+   "bytes": 906320
+  },
+  {
+   "file": "js/bank/questions9_013.js",
+   "module": "政治理论",
+   "count": 15,
+   "bytes": 50811
+  }
+ ]
+}

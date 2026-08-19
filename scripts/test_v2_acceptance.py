@@ -34,10 +34,10 @@ with sync_playwright() as p:
       srcCount: allQuestions().filter(q => q.src && q.src.year).length,
       numCount: allQuestions().filter(q => Number.isInteger(q.num)).length
     })""")
-    check('数据-总题库154178', data['total'] == 154178, str(data))
+    check('数据-总题库59068(去重后)', data['total'] == 59068, str(data))
     check('数据-allQuestions缓存复用', data['cacheSame'])
-    check('数据-src结构化来源已注入', data['srcCount'] >= 140000, f"{data['srcCount']}")
-    check('数据-卷内题号num已注入', data['numCount'] >= 140000, f"{data['numCount']}")
+    check('数据-src结构化来源已注入', data['srcCount'] >= 52000, f"{data['srcCount']}")
+    check('数据-卷内题号num已注入', data['numCount'] >= 52000, f"{data['numCount']}")
 
     # 江苏 A 模板验收
     page.evaluate('renderCustomQuiz()')
@@ -82,7 +82,7 @@ with sync_playwright() as p:
     result_text = page.locator('#searchResults').inner_text()
     check('D-检索防抖忙碌反馈', busy)
     check('D-检索防抖执行完成', '没有匹配' in result_text, result_text[:80])
-    check('D-题库数量动态展示', '154,178' in page.locator('#view').inner_text())
+    check('D-题库数量动态展示', '59,068' in page.locator('#view').inner_text())
 
     # 超窄屏导航与触摸热区
     nav = page.evaluate("""() => {

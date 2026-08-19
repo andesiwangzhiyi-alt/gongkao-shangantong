@@ -21,8 +21,8 @@ const src=fs.readFileSync('js/questions.js','utf8')+fs.readFileSync('js/question
 # 用 node 直接执行拼接源码，检查语法 + 统计
 import glob
 js_src = ''
-base_files = ['js/questions.js','js/questions2.js','js/questions3.js','js/questions4.js','js/questions5.js','js/questions7.js']
-chunk_files = sorted(glob.glob(os.path.join(ROOT,'js','bank','questions6_*.js')))
+base_files = ['js/questions.js','js/questions2.js','js/questions3.js','js/questions4.js','js/questions5.js','js/questions7.js','js/questions8.js']
+chunk_files = sorted(glob.glob(os.path.join(ROOT,'js','bank','questions6_*.js'))) + sorted(glob.glob(os.path.join(ROOT,'js','bank','questions9_*.js')))
 for f in base_files:
     js_src += open(os.path.join(ROOT,f), encoding='utf-8').read() + '\n'
 for f in chunk_files:
@@ -54,7 +54,7 @@ if r.returncode != 0:
 else:
     check('JS 语法/加载', True)
     report = json.loads(m.group(1))
-    expected = {'政治理论':7204,'常识判断':36472,'言语理解':28624,'数量关系':10616,'判断推理':44904,'资料分析':26358}
+    expected = {'政治理论':2077,'常识判断':17773,'言语理解':14282,'数量关系':4820,'判断推理':11477,'资料分析':8639}
     for k,v in expected.items():
         check(f'题库-{k} 数量={v}', report['mods'].get(k)==v, f"实际{report['mods'].get(k)}")
     check('题库-字段完整性', len(report['bad'])==0, f"异常题: {report['bad'][:5]}")

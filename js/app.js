@@ -38,12 +38,26 @@ function optImgsHtml(q, i){
   if(!q.opt_images||!q.opt_images[i]||!q.opt_images[i].length) return '';
   return q.opt_images[i].map(u=>`<img class="q-img opt-img" src="${u}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`).join('');
 }
+function optTextHtml(q, i){
+  /* 选项文本 + 图：替换 [图] 占位文字并附加图片 */
+  let t=esc(String(q.options[i]||''));
+  const imgs=(q.opt_images&&q.opt_images[i])||[];
+  if(imgs.length){
+    t=t.replace(/\[图\]/g,'');
+    t+=imgs.map(u=>`<img class="q-img opt-img" src="${u}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`).join('');
+  } else {
+    t=t.replace(/\[图\]/g,'（图）');
+  }
+  return t;
+}
 /* 渲染材料（文本 + [图] 占位替换为材料图） */
 function renderMat(q){
   let s=esc(q.mat);
   if(q.mat_images&&q.mat_images.length){
     let n=0;
     s=s.replace(/\[图\]/g,()=>`<img class="q-img" src="${q.mat_images[n++]}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`);
+  } else {
+    s=s.replace(/\[图\]/g,'（图）');
   }
   return s;
 }
@@ -322,6 +336,7 @@ function renderPractice(){
     <div class="muted mb10">按关键词/考点/来源/正确率筛选全库 ${allQuestions().length.toLocaleString()} 题，支持练习与导出</div>
     <div class="search-grid">
       <input id="searchKw" placeholder="关键词（题干/选项/解析）" oninput="searchDebounced()">
+      <input id="searchTag" placeholder="标签/来源关键字（如 北京 / 2023 / 第三季 / 行政执法）" oninput="searchDebounced()">
       <input id="searchPoint" placeholder="考点关键词（如 逻辑推理/比重）" oninput="searchDebounced()">
       <select id="searchSrc" onchange="doSearch()">
         <option value="">全部来源</option><option>国考</option><option>省考</option><option>模考</option><option>原创</option><option>精选</option>
@@ -346,12 +361,49 @@ function renderPractice(){
 
 /* ---------- 标签与来源解析 ---------- */
 function qSource(q){
+  const exams=[q.src,...(q.srcs||[])].filter(Boolean).map(s=>String(s.exam||''));
+  if(exams.length) return [...new Set(exams)].join(' / ');
   if(!q.tag) return '';
   const t = String(q.tag);
   if(t.includes('国考')) return '国考真题';
   if(t.includes('模考')) return '模考';
   if(/^[\u4e00-\u9fa5]{2,4}\d{4}$/.test(t)||t.includes('20')) return t.includes('年')? '省考真题':'省考';
   return t;
+}
+/* 来源短标签：真题=某年·某地·卷别；模考=某年·某考·第某季·地区
+   支持多来源（q.srcs 聚合数组） */
+function fmtSrc(s){
+  if(!s || typeof s!=='object') return '';
+  const parts=[];
+  if(s.exam==='国考'||s.exam==='省考'){                      // 真题
+    const y=s.year||''; const p=s.province||''; const c=s.category||'';
+    parts.push(...[y, s.exam==='国考'?'国考':'省考', p, c].filter(Boolean));
+  } else {                                                   // 模考/精选
+    const y=s.year||'';
+    const e=s.exam||'';
+    const se=s.season? `第${s.season}季` : '';
+    const p=s.province||'';
+    const c=s.category||'';
+    parts.push(...[y, e, se, p, c].filter(Boolean));
+  }
+  const base=parts.join('·');
+  return base && s.num!=null? `${base}·第${s.num}题` : base;
+}
+function srcTags(q){
+  const out=[];
+  const push=s=>{ s=s.trim(); if(s && !out.includes(s)) out.push(s); };
+  push(fmtSrc(q.src));
+  (q.srcs||[]).forEach(s=>push(fmtSrc(s)));
+  if(!out.length && q.tag) {
+    // 兜底旧 tag（如 北京2022）
+    const m=String(q.tag).match(/^(.+?)(\d{4})$/);
+    out.push(m? `${m[2]}·${m[1]}·省考` : String(q.tag));
+  }
+  return out;
+}
+function srcLineHtml(q){
+  const tags=srcTags(q);
+  return tags.length? tags.map(t=>`<span class="tag" style="background:#e6f7ec;color:#18794e;margin-right:4px">${esc(t)}</span>`).join('') : '';
 }
 function qRate(q){
   const m = (q.analysis||'').match(/正确率\s*([\d.]+)%/);
@@ -365,10 +417,10 @@ function qTagHtml(q){
   const parts=[];
   if(q.multi) parts.push('<span class="tag" style="background:#e8d9ff;color:#8e6fd8">多选</span>');
   if(q.type) parts.push(`<span class="tag" style="background:#e8f0fe;color:#3d7edb">${esc(q.type)}</span>`);
-  const src=qSource(q); if(src) parts.push(`<span class="tag" style="background:#e6f7ec;color:#3aa876">${esc(src)}</span>`);
+  parts.push(srcLineHtml(q));  // 多来源标签
   const rt=qRate(q); if(rt) parts.push(`<span class="tag" style="background:#fdf3e2;color:#e0962f">正确率 ${rt}%</span>`);
   const pt=qPoints(q); if(pt) parts.push(`<span class="tag" style="background:#fdeaea;color:#d96a4f">${esc(pt.split(' ')[0])}</span>`);
-  return parts.join('');
+  return parts.filter(Boolean).join('');
 }
 
 /* ---------- 题库检索 ---------- */
@@ -376,16 +428,19 @@ let __lastSearch=[];
 const runSearchDebounced=debounce(()=>setTimeout(()=>doSearch(),0),320);
 function searchDebounced(){
   const box=$('#searchResults');
-  if(box) box.innerHTML='<div class="muted search-busy">正在检索 15 万题…</div>';
+  if(box) box.innerHTML=`<div class="muted search-busy">正在检索 ${allQuestions().length.toLocaleString('zh-CN')} 题…</div>`;
   runSearchDebounced();
 }
 function doSearch(){
+  const resultBox=$('#searchResults');
+  if(!resultBox) return; // 防抖期间切换页面时，搜索容器可能已销毁
   const kw=($('#searchKw')?.value||'').trim().toLowerCase();
+  const tg=($('#searchTag')?.value||'').trim().toLowerCase();
   const pt=($('#searchPoint')?.value||'').trim().toLowerCase();
   const src=$('#searchSrc')?.value||'';
   const mod=$('#searchMod')?.value||'';
   const rate=$('#searchRate')?.value||'';
-  if(!kw&&!pt&&!src&&!mod&&!rate){ $('#searchResults').innerHTML='<div class="muted">输入关键词开始检索…</div>'; __lastSearch=[]; return; }
+  if(!kw&&!tg&&!pt&&!src&&!mod&&!rate){ $('#searchResults').innerHTML='<div class="muted">输入关键词开始检索…</div>'; __lastSearch=[]; return; }
   const list=allQuestions().filter(q=>{
     if(mod&&q.mod!==mod) return false;
     if(src){
@@ -410,16 +465,24 @@ function doSearch(){
       const hay=(qPoints(q)+' '+q.analysis).toLowerCase();
       if(!hay.includes(pt)) return false;
     }
+    if(tg){
+      // 标签/来源关键字：匹配 tag、结构化来源全字段、多来源聚合
+      const s=q.src||{};
+      let hay=[q.tag||'', s.year||'', s.exam||'', s.province||'', s.category||'', s.season||'', s.name||''];
+      (q.srcs||[]).forEach(x=>hay.push(x.year||'', x.exam||'', x.province||'', x.category||'', x.season||'', x.name||''));
+      if(!hay.join(' ').toLowerCase().includes(tg)) return false;
+    }
     return true;
   });
   __lastSearch=list;
+  const show=list.slice(0,100);  // 分页：最多渲染100条
   $('#searchResults').innerHTML = list.length
     ? `<div class="muted" style="margin-bottom:8px">共 ${list.length} 题（点击任意题直接练习）</div>`+
-      list.slice(0,30).map((q,i)=>`<div class="sr-item" onclick="startQuiz(shuffle(__lastSearch),'检索结果练习')">
+      show.map((q,i)=>`<div class="sr-item" onclick="startQuiz(shuffle(__lastSearch),'检索结果练习')">
         <span class="sr-no">${i+1}</span>
         <span class="sr-stem">${esc(q.stem.slice(0,60))}${q.stem.length>60?'…':''}</span>
         ${qTagHtml(q)}
-      </div>`).join('') + (list.length>30?`<div class="muted">…还有 ${list.length-30} 题，点击上方按钮直接练习全部</div>`:'')
+      </div>`).join('') + (list.length>100?`<div class="muted">…还有 ${list.length-100} 题，点击上方按钮直接练习全部</div>`:'')
     : '<div class="muted">没有匹配的题目，换个关键词试试</div>';
 }
 
@@ -456,23 +519,25 @@ function printFiltered(){
   const list=__lastSearch||[];
   if(!list.length){ toast('请先搜索出题目再导出'); return; }
   const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>上岸通 · 题目与解析</title>
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${baseHref()}"><title>上岸通 · 题目与解析</title>
   <style>body{font-family:'Microsoft YaHei',sans-serif;padding:24px;color:#222;max-width:820px;margin:0 auto}
   .q{margin-bottom:22px;padding-bottom:16px;border-bottom:1px dashed #ccc;page-break-inside:avoid}
   .no{font-weight:700;color:#3d7edb;margin-bottom:6px}.stem{margin-bottom:8px;line-height:1.7}
   .opt{margin:3px 0 3px 18px}.ans{color:#3aa876;font-weight:600;margin-top:6px}
   .ana{background:#f6f8fb;border-left:3px solid #3d7edb;padding:10px 12px;margin-top:8px;line-height:1.7;font-size:13.5px;white-space:pre-wrap}
   .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:8px;background:#eee;margin:0 4px 2px 0}
+  img{max-width:100%}
   h1{color:#1b2a4a;text-align:center}@media print{.q{break-inside:avoid}}</style></head><body>
   <h1>📘 上岸通 · 题目与解析（${list.length} 题）</h1>
   <p style="text-align:center;color:#888">生成时间：${new Date().toLocaleString()}</p>
   ${list.map((q,i)=>`<div class="q"><div class="no">${i+1}. [${q.mod}] ${q.type}${q.multi?'（多选）':''}</div>
-    <div class="tag" style="background:#e8f0fe;color:#3d7edb">${esc(srcLine(q)||qSource(q)||'未标注')}</div>${qRate(q)?`<div class="tag" style="background:#fdf3e2;color:#e0962f">正确率 ${qRate(q)}%</div>`:''}${qPoints(q)?`<div class="tag" style="background:#fdeaea;color:#d96a4f">${esc(qPoints(q))}</div>`:''}
-    <div class="stem">${esc(q.stem).replace(/\[图(\d+)\]/g,'[图片]')}</div>
-    ${q.options.map((o,j)=>`<div class="opt">${'ABCD'[j]}. ${esc(o)}</div>`).join('')}
+    <div style="margin:4px 0">${srcLineHtml(q)}</div>${qRate(q)?`<div class="tag" style="background:#fdf3e2;color:#e0962f">正确率 ${qRate(q)}%</div>`:''}${qPoints(q)?`<div class="tag" style="background:#fdeaea;color:#d96a4f">${esc(qPoints(q))}</div>`:''}
+    ${q.mat?`<div class="ana" style="background:#f8f9fa;border-color:#999">${printMatHtml(q)}</div>`:''}
+    <div class="stem">${printStemHtml(q)}</div>
+    <div class="opt">${printOptsHtml(q)}</div>
     <div class="ans">✅ 答案：${q.multi?q.answer:('ABCD'[q.answer])}</div>
-    <div class="ana">${esc(q.analysis)}</div></div>`).join('')}
-  <script>window.onload=function(){setTimeout(()=>window.print(),400)}</script>
+    <div class="ana">${esc(cleanAnalysisText(q.analysis))}</div></div>`).join('')}
+  ${printWaitScript()}
   </body></html>`);
   w.document.close();
 }
@@ -681,24 +746,67 @@ function submitFill(code){
 
 /* ---------- 真题卷格式 PDF 导出 v2（全真/练习双模式） ---------- */
 function srcText(q){
-  /* 详细来源注明：优先结构化 src，兜底旧 tag */
-  const s=q.src||{};
-  if(s.name) return s.name;
-  return String(q.tag||'');
+  /* 打印/导出用文本来源：多来源合并展示 */
+  const tags=srcTags(q);
+  return tags.length? tags.join(' / ') : String(q.tag||'');
 }
 function srcNo(q){ return q.num? `第${q.num}题` : ''; }
 function srcLine(q){
-  /* 题干前的来源注明行（练习模式） */
-  const s=q.src||{};
-  let t=srcText(q);
+  /* 题干前的来源注明行：结构化来源标签已自带原卷题号 */
+  const t=srcText(q);
+  if(q.src) return t;
   const no=srcNo(q);
-  let extra=[];
-  if(s.year) extra.push(s.year);
-  if(s.exam) extra.push(s.exam);
-  if(s.province) extra.push(s.province);
-  if(s.category&&!s.name) extra.push(s.category);
-  const src=(extra.length? extra.join('·') : t) + (no? '·'+no : '');
-  return src;
+  return t + (no? '·'+no : '');
+}
+/* ---------- 打印/导出图片修复（v2.1） ---------- */
+function cleanAnalysisText(an){
+  /* 运行时兜底：数据层已清洗，这里再清一次防旧缓存 */
+  an=String(an||'');
+  const pos=an.lastIndexOf('来源20');
+  if(pos>=0 && an.length-pos<150) an=an.slice(0,pos).replace(/[\s\u3000　]+$/,'');
+  an=an.replace(/\n?[（(]来源[：:]\s*20\d\d[^）)]*[）)]/g,'');
+  an=an.replace(/\n?来源[：:]\s*20\d\d[^\n]*/g,'');
+  an=an.replace(/视频解析/g,'');
+  return an.trim();
+}
+function printImg(url, alt){
+  if(!url) return '';
+  return `<img src="${url}" alt="${alt||'图'}" style="max-width:100%;max-height:280px;vertical-align:middle">`;
+}
+function printStemHtml(q){
+  let s=esc(String(q.stem||''));
+  if(q.images&&q.images.length) s=s.replace(/\[图(\d+)\]/g,(m,n)=>printImg(q.images[+n]));
+  return s;
+}
+function printMatHtml(q){
+  let s=esc(String(q.mat||''));
+  if(q.mat_images&&q.mat_images.length){ let n=0; s=s.replace(/\[图\]/g,()=>printImg(q.mat_images[n++])); }
+  return s;
+}
+function printOptsHtml(q){
+  return q.options.map((o,j)=>{
+    let t=esc(String(o));
+    if(q.opt_images&&q.opt_images[j]&&q.opt_images[j].length){
+      t=t.replace(/\[图\]/g,'');  // 去掉占位文字
+      t+=q.opt_images[j].map(u=>printImg(u)).join('');
+    }
+    return `<div>${'ABCD'[j]}. ${t}</div>`;
+  }).join('');
+}
+function printWaitScript(){
+  /* 等图片加载完成再触发打印（最多等4秒） */
+  return `<script>window.onload=function(){
+    var imgs=[].slice.call(document.images);
+    if(!imgs.length){ setTimeout(function(){window.print()},300); return; }
+    var done=0, fired=false;
+    function tryPrint(){ if(fired) return; done++; if(done>=imgs.length){ fired=true; setTimeout(function(){window.print()},300); } }
+    imgs.forEach(function(im){ if(im.complete) tryPrint(); else { im.onload=tryPrint; im.onerror=tryPrint; } });
+    setTimeout(function(){ if(!fired){ fired=true; window.print(); } }, 4000);
+  }<\/script>`;
+}
+function baseHref(){
+  const p=location.href.split('/'); p.pop();
+  return p.join('/')+'/';
 }
 function printPaper(qs){
   const w=window.open('','_blank');
@@ -717,10 +825,11 @@ function printPaper(qs){
   };
   // 按模块分组（保持卷面顺序）
   const parts=MOD_ORDER.filter(m=>qs.some(q=>q.mod===m)).map(m=>({mod:m, list:qs.filter(q=>q.mod===m)}));
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${cfgName}${fullReal?'·全真模拟卷':'·练习卷'}</title>
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${baseHref()}"><title>${cfgName}${fullReal?'·全真模拟卷':'·练习卷'}</title>
   <style>
   @page{size:A4;margin:18mm 16mm}
   body{font-family:SimSun,'Songti SC','Microsoft YaHei',serif;color:#000;font-size:12px;line-height:1.7}
+  img{max-width:100%}
   .head{text-align:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:14px}
   .head h1{font-size:18px;letter-spacing:2px;margin-bottom:2px}
   .head .sub{font-size:12px}
@@ -762,10 +871,9 @@ function printPaper(qs){
     <div class="part-dir">${p.mod==='资料分析'?'本部分题目提供材料，请根据材料内容作答。':p.mod==='言语理解'?'本部分包括表达与理解两方面的内容，请根据题目要求，在四个选项中选出一个最恰当的答案。':p.mod==='判断推理'?'本部分包括图形推理、定义判断、类比推理与逻辑判断等内容，请根据题目要求作答。':p.mod==='数量关系'?'在这部分试题中，每道题呈现一段表述数字关系的文字，要求你迅速、准确地计算出答案。':p.mod==='常识判断'?'本部分涵盖政治、经济、法律、人文、科技等方面的知识，请根据题目要求作答。':p.mod==='政治理论'?'本部分主要测查报考者学习理解掌握党的创新理论及党和国家方针政策的情况。':'请根据题目要求作答。'}</div>`
     +p.list.map(q=>{
       const no=qs.indexOf(q)+1;
-      const mat=q.mat||'';
-      return (mat?`<div class="material">${esc(mat).replace(/\[图\]/g,'（图）')}</div>`:'')+
-        `<div class="q">${srcNote(q)}<span class="no">${no}.</span><div class="stem">${esc(q.stem).replace(/\[图(\d+)\]/g,'（图）')}</div>
-        <div class="opts">${q.options.map((o,j)=>`<div>${'ABCD'[j]}. ${esc(o)}</div>`).join('')}</div></div>`;
+      return (q.mat?`<div class="material">${printMatHtml(q)}</div>`:'')+
+        `<div class="q">${srcNote(q)}<span class="no">${no}.</span><div class="stem">${printStemHtml(q)}</div>
+        <div class="opts">${printOptsHtml(q)}</div></div>`;
     }).join('');
   }).join('')}
   <div class="card-page"><div class="part">📝 答题卡（可打印后涂卡，做完扫码/回填线上判卷）</div>
@@ -778,9 +886,9 @@ function printPaper(qs){
   </table>
   <div class="foot">打印后可在上方涂卡；做完后用「上岸通 · 答案回填」扫码或拍照回填，自动判卷并记录个人数据</div></div>
   <div class="ans-page"><div class="part">📋 参考答案与解析（${qs.length} 题）</div>
-  ${qs.map((q,i)=>`<div class="q"><b>${i+1}. ${q.mod} · ${q.type}</b> 答案：<b>${q.multi?q.answer:('ABCD'[q.answer])}</b>${qRate(q)?`（正确率 ${qRate(q)}%）`:''}${qPoints(q)?` · 考点：${esc(qPoints(q))}`:''}${fullReal?'':'<div style="font-size:10px;color:#8a6d3b">来源：'+esc(srcLine(q))+'</div>'}<div class="material" style="border:none;background:transparent;padding:4px 0 0">${esc(q.analysis)}</div></div>`).join('')}
+  ${qs.map((q,i)=>`<div class="q"><b>${i+1}. ${q.mod} · ${q.type}</b> 答案：<b>${q.multi?q.answer:('ABCD'[q.answer])}</b>${qRate(q)?`（正确率 ${qRate(q)}%）`:''}${qPoints(q)?` · 考点：${esc(qPoints(q))}`:''}${fullReal?'':'<div style="font-size:10px;color:#8a6d3b">来源：'+esc(srcLine(q))+'</div>'}<div class="material" style="border:none;background:transparent;padding:4px 0 0">${esc(cleanAnalysisText(q.analysis))}</div></div>`).join('')}
   <div class="foot">本卷由上岸通智能生成，仅供学习使用 · 解析版权归原题库方所有</div></div>
-  <script>window.onload=function(){setTimeout(()=>window.print(),500)}</script>
+  ${printWaitScript()}
   </body></html>`);
   w.document.close();
 }
@@ -1135,13 +1243,13 @@ function renderQ(){
       mark='<span class="mark">✓</span>';
     }
     return `<button class="${cls}" onclick="pick(${i})">
-      <span class="ol">${'ABCD'[i]}</span>${esc(op)}${optImgsHtml(q,i)}${mark}
+      <span class="ol">${'ABCD'[i]}</span>${optTextHtml(q,i)}${mark}
       ${Q.marks[q.id]&&!answered?'<span class="marked-tag">⚑ 已标记</span>':''}
     </button>`;
   }).join('')}
   ${multi&&!answered? `<button class="btn primary" style="margin-top:14px" onclick="submitMulti()">✓ 确定选择（${sel.length} 项）</button>`:''}
   ${answered? `
-    <div class="q-analy"><b>💡 解析：</b>${esc(q.analysis)}</div>`:''}
+    <div class="q-analy"><b>💡 解析：</b>${esc(cleanAnalysisText(q.analysis))}</div>`:''}
   `;
   updateFoot();
   if(Q.limit){ $('#quizTimer').textContent='⏱ '+fmtClock(Math.max(0,Q.limit-Q.elapsed)); }
@@ -1256,10 +1364,10 @@ function renderReview(){
       mark=`<span class="mark">${right?'✅':'❌'}</span>`;
     }
     return `<div class="${cls}">
-      <span class="ol">${'ABCD'[i]}</span>${esc(op)}${optImgsHtml(q,i)}${mark}
+      <span class="ol">${'ABCD'[i]}</span>${optTextHtml(q,i)}${mark}
     </div>`;
   }).join('')}
-  <div class="q-analy"><b>💡 解析：</b>${esc(q.analysis)}<br><span class="muted">你${chosen!==undefined? '选了 '+qAnsText(q,chosen)+(isCorrect(q,chosen)?'，回答正确':'，回答错误'):'未作答'} · 正确答案 ${qAnsText(q,q.answer)}</span></div>`;
+  <div class="q-analy"><b>💡 解析：</b>${esc(cleanAnalysisText(q.analysis))}<br><span class="muted">你${chosen!==undefined? '选了 '+qAnsText(q,chosen)+(isCorrect(q,chosen)?'，回答正确':'，回答错误'):'未作答'} · 正确答案 ${qAnsText(q,q.answer)}</span></div>`;
   updateFoot();
 }
 function reviewNav(dir){ Q.idx+=dir; if(Q.idx<0)Q.idx=0; if(Q.idx>=Q.list.length)Q.idx=Q.list.length-1; renderReview(); }
