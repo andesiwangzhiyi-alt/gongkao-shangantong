@@ -76,7 +76,8 @@ for prefix, files, manifest in [('questions6', chunks6, 'questions6-manifest.jso
     m = json.load(open(os.path.join(ROOT,'js','bank',manifest), encoding='utf-8'))
     n = len(load_concat(files))
     check(f'{prefix} manifest题数一致', m['total'] == n, f'{m["total"]}/{n}')
-    check(f'{prefix} manifest分片数一致', len(m['chunks']) == len(files), f'{len(m["chunks"])}/{len(files)}')
+    check(f'{prefix} manifest分片数一致', len(m['chunks']) == len(files), f"{len(m['chunks'])}/{len(files)}")
+    check(f'{prefix} manifest含内容指纹', m.get('version') == 4 and bool(re.fullmatch(r'[0-9a-f]{16}', m.get('build',''))), str({k:m.get(k) for k in ('version','build')}))
 
-print(f'==== v2.1质量验收：通过 {18-len(FAIL)}/18，失败 {FAIL or "无"} ====')
+print(f'==== v2.1质量验收：通过 {20-len(FAIL)}/20，失败 {FAIL or "无"} ====')
 raise SystemExit(1 if FAIL else 0)

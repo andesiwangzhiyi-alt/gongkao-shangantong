@@ -14,6 +14,7 @@ import json
 import glob
 import os
 import sys
+import hashlib
 from collections import Counter, defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -367,11 +368,14 @@ def main():
         files = sorted(glob.glob(os.path.join(ROOT, pat)))
         chunks = []
         tot = 0
+        digest = hashlib.sha256()
         for fp in files:
-            # 统计该分片题数与模块
+            # 统计该分片题数与模块，同时生成内容版本指纹供前端缓存失效
             cnt = 0
             mods = set()
-            t = open(fp, encoding='utf-8').read()
+            raw = open(fp, 'rb').read()
+            digest.update(raw)
+            t = raw.decode('utf-8')
             for line in t.split('\n'):
                 m = re.match(r'^QUESTION_BANK\["([^"]+)"\] = QUESTION_BANK\["[^"]+"\]\.concat\((\[.*\])\);\s*$', line)
                 if m:
@@ -382,7 +386,7 @@ def main():
                         pass
             tot += cnt
             chunks.append({'file': os.path.relpath(fp, ROOT).replace('\\', '/'), 'module': '、'.join(sorted(mods)), 'count': cnt, 'bytes': os.path.getsize(fp)})
-        man = {'version': 3, 'total': tot, 'chunks': chunks}
+        man = {'version': 4, 'build': digest.hexdigest()[:16], 'total': tot, 'chunks': chunks}
         with open(os.path.join(ROOT, f'js/bank/{out_name}'), 'w', encoding='utf-8') as f:
             json.dump(man, f, ensure_ascii=False, indent=1)
         print(f'manifest 已写 {out_name}: total={tot} chunks={len(chunks)}')

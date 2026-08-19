@@ -76,12 +76,36 @@ function allQuestions(){
   allQuestions._c = MODS.flatMap(m=>QUESTION_BANK[m].map(q=>({...q,mod:m})));
   return allQuestions._c;
 }
-window.addEventListener('sat:bank-loaded',()=>{
-  allQuestions._c=null; // questions6 追加完成后使缓存失效
+function bankProgressView(st, state){
+  const el=$('#bankProgress'); if(!el) return;
+  clearTimeout(bankProgressView._t);
+  const total=st?.totalChunks||0, loaded=st?.loadedChunks||0;
+  const pct=state==='loaded'?100:(total?Math.round(loaded/total*100):2);
+  el.classList.remove('hidden','done','error');
+  el.classList.toggle('done',state==='loaded');
+  el.classList.toggle('error',state==='error');
+  const bar=el.querySelector('i'), label=el.querySelector('span');
+  if(bar) bar.style.width=`${pct}%`;
+  if(label) label.textContent=state==='error'?'题库加载失败':state==='loaded'?(st?.cacheHit?'⚡ 缓存题库已就绪':'✓ 完整题库已就绪'):`完整题库 ${pct}%`;
+  if(state==='loaded') bankProgressView._t=setTimeout(()=>el.classList.add('hidden'),3500);
+}
+window.addEventListener('sat:bank-loading',e=>bankProgressView(e.detail,'loading'));
+window.addEventListener('sat:bank-progress',e=>bankProgressView(e.detail,'progress'));
+window.addEventListener('sat:bank-loaded',e=>{
+  allQuestions._c=null; // 懒加载追加完成后使缓存失效
+  bankProgressView(e.detail,'loaded');
   if(typeof currentView==='function' && currentView()==='dashboard') renderDash();
-  toast(`完整题库已就绪：${allQuestions().length.toLocaleString()} 题`,'ok');
+  const via=e.detail?.cacheHit?'（本地缓存）':'';
+  toast(`完整题库已就绪${via}：${allQuestions().length.toLocaleString()} 题`,'ok');
 });
-window.addEventListener('sat:bank-error',()=>toast('完整题库加载失败，请检查网络后重试','error'));
+window.addEventListener('sat:bank-error',e=>{
+  bankProgressView(e.detail,'error');
+  toast('完整题库加载失败，请检查网络后重试','error');
+});
+window.addEventListener('sat:bank-cache-ready',()=>{
+  const el=$('#bankProgress');
+  if(el){ el.title='完整题库已持久缓存，下次访问可快速恢复'; }
+});
 function requireFullBank(then){
   if(!window.ensureFullBank || window.LAZY_BANK_STATUS?.loaded) return false;
   toast('正在加载完整题库，请稍候…');
@@ -1073,6 +1097,23 @@ function delCustomSl(title){
 }
 
 /* ============ 更多 ============ */
+function bankCacheStatusText(){
+  const s=window.LAZY_BANK_STATUS;
+  if(!s) return '当前浏览器不支持完整题库缓存';
+  if(s.cacheHit) return '本次已从本地缓存快速恢复完整题库';
+  if(s.cacheStored) return '完整题库已缓存，下次访问可快速恢复';
+  if(s.loading) return '完整题库正在加载，完成后会自动缓存';
+  if(s.loaded) return '完整题库已加载，正在后台写入缓存';
+  return '完整题库尚未加载';
+}
+async function clearBankCache(){
+  if(!confirm('只清理约 150MB 的完整题库缓存？作答记录、错题本和个人画像不会删除。')) return;
+  try{
+    if(window.clearFullBankCache) await window.clearFullBankCache();
+    toast('题库缓存已清理，下次访问将重新下载','ok');
+    if(currentView()==='more') renderMore();
+  }catch(e){ toast(e?.message||'题库缓存清理失败','error'); }
+}
 function renderMore(){
   const due=reviewDue();
   $('#view').innerHTML=`
@@ -1115,6 +1156,10 @@ function renderMore(){
       <div class="btn-row"><button class="btn small primary" onclick="openUrl('https://github.com/dduutt/fenbi')">打开项目</button></div>
     </div>
   </div>
+  <div class="card"><h3><span class="dot"></span>⚡ 题库离线加速</h3>
+    <div class="muted">${bankCacheStatusText()}。缓存仅保存公共题库，约占 150MB；版本更新后会自动失效并重建。</div>
+    <div class="btn-row"><button class="btn" onclick="clearBankCache()">清理题库缓存</button></div>
+  </div>
   <div class="card"><h3><span class="dot"></span>数据管理</h3>
     <div class="btn-row">
       <button class="btn" onclick="exportData()">📤 导出备份</button>
@@ -1125,7 +1170,7 @@ function renderMore(){
     <div class="muted mt8">数据保存在浏览器本地（localStorage），导出为 JSON 文件可随时恢复或迁移到其他设备。</div>
   </div>
   <div class="card"><h3><span class="dot"></span>关于</h3>
-    <div class="muted">上岸通 v1.0 — 考公一站式学习工具。纯前端离线可用，题库与素材持续扩充中。祝你一战成公！🎉</div>
+    <div class="muted">上岸通 v2.2 — 考公一站式学习工具。纯前端、题库持久缓存、离线加速，题库与素材持续扩充中。祝你一战成公！🎉</div>
   </div>`;
 }
 function heatmap(){
@@ -1404,7 +1449,7 @@ window.renderFillback=renderFillback; window.loadFillPaper=loadFillPaper; window
 window.saveFill=saveFill; window.submitFill=submitFill; window.registerPaper=registerPaper;
 window.renderAnalysis=renderAnalysis; window.smartQuiz=smartQuiz;
 window.doSearch=doSearch; window.searchDebounced=searchDebounced; window.exportFiltered=exportFiltered; window.printFiltered=printFiltered;
-window.exportData=exportData; window.importData=importData; window.confirmReset=confirmReset;
+window.exportData=exportData; window.importData=importData; window.confirmReset=confirmReset; window.clearBankCache=clearBankCache;
 window.openUrl=(u)=>{ window.open(u,'_blank'); };
 window.toggleReview=toggleReview; window.pomoToggle=pomoToggle; window.pomoReset=pomoReset;
 window.reviewQuiz=reviewQuiz; window.reviewNav=reviewNav; window.closeResult=closeResult;

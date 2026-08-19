@@ -24,6 +24,11 @@ input,textarea,select{font-family:inherit;font-size:14px}
 .brand-name em{display:block;font-style:normal;font-size:10px;font-weight:400;opacity:.75;letter-spacing:2px}
 .streak-badge{background:rgba(255,255,255,.14);border-radius:20px;padding:4px 12px;font-size:13px}
 .streak-badge b{color:var(--gold-2);font-size:15px}
+.bank-progress{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.12);overflow:visible;z-index:2}
+.bank-progress i{display:block;width:0;height:100%;background:linear-gradient(90deg,var(--gold),#fff1b8);transition:width .2s ease;box-shadow:0 0 7px rgba(255,220,120,.8)}
+.bank-progress span{position:absolute;right:8px;bottom:5px;padding:2px 7px;border-radius:10px;background:rgba(10,31,51,.82);color:#fff;font-size:10px;white-space:nowrap}
+.bank-progress.done i{background:#61d98b}
+.bank-progress.error i{background:#ff7272}
 
 /* ---- 视图容器 ---- */
 .view{flex:1;padding:14px 14px 80px}
