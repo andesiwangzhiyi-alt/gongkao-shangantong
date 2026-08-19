@@ -91,6 +91,11 @@ function bankProgressView(st, state){
 }
 window.addEventListener('sat:bank-loading',e=>bankProgressView(e.detail,'loading'));
 window.addEventListener('sat:bank-progress',e=>bankProgressView(e.detail,'progress'));
+window.addEventListener('sat:bank-retry',e=>{
+  bankProgressView(e.detail,'progress');
+  const label=$('#bankProgress span');
+  if(label) label.textContent=`网络波动，自动重试 ${e.detail?.retries||1}`;
+});
 window.addEventListener('sat:bank-loaded',e=>{
   allQuestions._c=null; // 懒加载追加完成后使缓存失效
   bankProgressView(e.detail,'loaded');

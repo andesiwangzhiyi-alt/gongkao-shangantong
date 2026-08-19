@@ -23,11 +23,18 @@ with sync_playwright() as p:
     context=browser.new_context()
     page=context.new_page()
     errors=[]; page.on('pageerror',lambda e: errors.append(str(e)))
+    flaky={'requests':0}
+    def fail_once(route):
+        flaky['requests']+=1
+        route.abort('failed') if flaky['requests']==1 else route.continue_()
+    page.route('**/js/bank/questions6_001.js', fail_once)
     page.goto(URL,wait_until='domcontentloaded',timeout=60000)
     page.evaluate('() => ensureFullBank()')
     first=wait_loaded(page)
     first_ms=first['loadedAt']-first['startedAt']
     check('首次从网络分片加载',first['source']=='network',str(first))
+    check('瞬时分片失败自动重试成功',first.get('retries')==1 and flaky['requests']==2,str({'status':first.get('retries'),'requests':flaky['requests']}))
+    check('普通设备采用6路并发',first.get('parallel')==6,str(first.get('parallel')))
     check('首次完整题量59068',page.evaluate('() => allQuestions().length')==59068)
     check('manifest带内容指纹',bool(first.get('signature')) and 'q6:' in first['signature'])
 
@@ -83,5 +90,5 @@ with sync_playwright() as p:
     print(f'PERF first={first_ms}ms cached={second_ms}ms speedup={first_ms/max(second_ms,1):.1f}x')
     browser.close()
 
-print(f'==== v2.2缓存验收：通过 {15-len(fails)}/15，失败 {fails or "无"} ====')
+print(f'==== v2.2缓存验收：通过 {17-len(fails)}/17，失败 {fails or "无"} ====')
 raise SystemExit(1 if fails else 0)

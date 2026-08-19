@@ -13,7 +13,7 @@
     startedAt: 0, loadedAt: 0,
     loadedChunks: 0, totalChunks: 0, totalQuestions: 0,
     source: null, cacheHit: false, cacheStored: false, cacheError: null,
-    signature: null
+    signature: null, retries: 0, parallel: 0
   };
   const loadedFiles = new Set();
   let promise = null;
@@ -64,7 +64,7 @@
     });
   }
 
-  function loadScript(src){
+  function loadScript(src, attempt=0){
     if(loadedFiles.has(src)) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
@@ -76,7 +76,16 @@
         emit('sat:bank-progress');
         resolve();
       };
-      s.onerror = () => { s.remove(); reject(new Error(`题库分片加载失败：${src}`)); };
+      s.onerror = () => {
+        s.remove();
+        if(attempt < 2){
+          status.retries++;
+          emit('sat:bank-retry');
+          setTimeout(()=>loadScript(src, attempt+1).then(resolve,reject), 500 * (2 ** attempt));
+        }else{
+          reject(new Error(`题库分片加载失败（已重试3次）：${src}`));
+        }
+      };
       document.head.appendChild(s);
     });
   }
@@ -148,6 +157,13 @@
     }
   }
 
+  function preferredParallel(){
+    const conn=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+    if(conn?.saveData || /(^|-)2g$/.test(conn?.effectiveType||'')) return 2;
+    if((navigator.deviceMemory||4) <= 2) return 3;
+    return 6;
+  }
+
   async function loadAll(){
     const {chunks, total, signature} = await fetchManifests();
     status.totalChunks = chunks.length;
@@ -163,8 +179,10 @@
     }
 
     status.source = 'network';
-    for(let i=0; i<chunks.length; i+=3){
-      await Promise.all(chunks.slice(i,i+3).map(x=>loadScript(x.file)));
+    const parallel=preferredParallel();
+    status.parallel=parallel;
+    for(let i=0; i<chunks.length; i+=parallel){
+      await Promise.all(chunks.slice(i,i+parallel).map(x=>loadScript(x.file)));
       await new Promise(resolve=>setTimeout(resolve,0));
     }
     // 缓存写入在后台执行，不延迟题库就绪事件。
