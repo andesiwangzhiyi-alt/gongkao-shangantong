@@ -4,7 +4,7 @@ import os
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-URL = 'http://127.0.0.1:8124/index.html'
+URL = os.environ.get('SAT_TEST_URL', 'http://127.0.0.1:8124/index.html')
 CHROME = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 fails = []
 

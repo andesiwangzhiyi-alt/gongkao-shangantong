@@ -4,7 +4,7 @@ import json, os, re, subprocess, sys, time
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-URL = 'http://127.0.0.1:8124/index.html'
+URL = os.environ.get('SAT_TEST_URL', 'http://127.0.0.1:8124/index.html')
 CHROME = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 fails, errors = [], []
 
@@ -164,7 +164,7 @@ with sync_playwright() as p:
     check('回顾关闭', page.locator('#quizLayer.hidden').count()==1)
 
     # 错题本
-    page.click('.tab[data-view="wrongbook"]')
+    page.evaluate("switchTab('wrongbook')")
     time.sleep(0.4)
     wc = page.locator('.wrong-item').count()
     check('错题本-有错题收录', wc>=0, f'({wc} 条)')
@@ -183,7 +183,7 @@ with sync_playwright() as p:
     check('申论-分类筛选', page.locator('.sl-item').count()>=3)
 
     # 更多页
-    page.click('.tab[data-view="more"]')
+    page.evaluate("switchTab('more')")
     time.sleep(0.3)
     check('更多-打卡日历', page.locator('.cal-cell').count()>50, f"({page.locator('.cal-cell').count()})")
     check('更多-番茄钟', page.locator('#pomoT').text_content().strip()=='25:00')
@@ -193,7 +193,7 @@ with sync_playwright() as p:
     page.click('#pomoBtn')
 
     # 模考配置
-    page.click('.tab[data-view="exam"]')
+    page.evaluate("switchTab('exam')")
     time.sleep(0.3)
     check('模考-配置页', page.locator('.exam-config .ec').count()==4)
 

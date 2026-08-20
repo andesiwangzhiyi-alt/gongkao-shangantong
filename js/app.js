@@ -1,4 +1,4 @@
-/* ============ 上岸通 · 考公学习神器 ============ */
+/* ============ 致泽学堂 · 考公学习神器 ============ */
 /* 纯前端、零依赖、本地存储、离线可用 */
 
 /* ---------- 工具 ---------- */
@@ -9,7 +9,29 @@ function fmtDate(offset){ const d = new Date(Date.now()+offset*86400000); return
 function shuffle(a){ const r=[...a]; for(let i=r.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[r[i],r[j]]=[r[j],r[i]];} return r; }
 function mulberry32(seed){ return function(){ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 function seededShuffle(a, seed){ const rnd=mulberry32(seed); const r=[...a]; for(let i=r.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[r[i],r[j]]=[r[j],r[i]];} return r; }
-function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function safeText(value){
+  const s=String(value??''); let out='';
+  for(let i=0;i<s.length;i++){
+    const c=s.charCodeAt(i);
+    if(c>=0xD800&&c<=0xDBFF){
+      const next=s.charCodeAt(i+1);
+      if(next>=0xDC00&&next<=0xDFFF){ out+=s[i]+s[++i]; } else out+='�';
+    } else out+=c>=0xDC00&&c<=0xDFFF?'�':s[i];
+  }
+  return out;
+}
+function esc(s){ return safeText(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function inlineArg(s){ return encodeURIComponent(safeText(s)).replace(/'/g,'%27'); }
+function safeImageUrl(value){
+  const url=safeText(value).trim();
+  if(!url||/[\u0000-\u001f\u007f]/.test(url)) return '';
+  const scheme=url.match(/^([a-z][a-z0-9+.-]*):/i);
+  return scheme&&!/^https?$/i.test(scheme[1])?'':url;
+}
+function imageHtml(url, className='q-img'){
+  const safe=safeImageUrl(url); if(!safe) return '';
+  return `<img class="${className}" src="${esc(safe)}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src,'_blank','noopener,noreferrer')">`;
+}
 function toast(msg, type){ const t=$('#toast'); t.textContent=msg; t.className='toast '+ (type||''); t.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.add('hidden'), 2200); }
 /* 多选/不定项判定与显示 */
 function isCorrect(q, ans){
@@ -30,13 +52,13 @@ function qAnsText(q, ans){
 function renderStem(q, stem){
   let s = esc(stem);
   if(q.images&&q.images.length){
-    s = s.replace(/\[图(\d+)\]/g, (m,n)=>`<img class="q-img" src="${q.images[+n]}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`);
+    s = s.replace(/\[图(\d+)\]/g, (m,n)=>imageHtml(q.images[+n]));
   }
   return s;
 }
 function optImgsHtml(q, i){
   if(!q.opt_images||!q.opt_images[i]||!q.opt_images[i].length) return '';
-  return q.opt_images[i].map(u=>`<img class="q-img opt-img" src="${u}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`).join('');
+  return q.opt_images[i].map(u=>imageHtml(u,'q-img opt-img')).join('');
 }
 function optTextHtml(q, i){
   /* 选项文本 + 图：替换 [图] 占位文字并附加图片 */
@@ -44,7 +66,7 @@ function optTextHtml(q, i){
   const imgs=(q.opt_images&&q.opt_images[i])||[];
   if(imgs.length){
     t=t.replace(/\[图\]/g,'');
-    t+=imgs.map(u=>`<img class="q-img opt-img" src="${u}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`).join('');
+    t+=imgs.map(u=>imageHtml(u,'q-img opt-img')).join('');
   } else {
     t=t.replace(/\[图\]/g,'（图）');
   }
@@ -55,7 +77,7 @@ function renderMat(q){
   let s=esc(q.mat);
   if(q.mat_images&&q.mat_images.length){
     let n=0;
-    s=s.replace(/\[图\]/g,()=>`<img class="q-img" src="${q.mat_images[n++]}" alt="图" loading="lazy" onclick="event.stopPropagation();window.open(this.src)">`);
+    s=s.replace(/\[图\]/g,()=>imageHtml(q.mat_images[n++]));
   } else {
     s=s.replace(/\[图\]/g,'（图）');
   }
@@ -67,10 +89,60 @@ const MOD_COLOR = {'常识判断':'#3d7edb','言语理解':'#3aa876','数量关�
 
 /* ---------- 存储 ---------- */
 const KEY='shangan_tong_v1';
+const ATT_LIMIT=3000;
 const DEF = { wrongs:{}, checkins:{}, stats:{answered:0,correct:0,byMod:{},daily:[]}, favs:[], customSl:[], pomo:{count:0,minutes:0}, attempts:[], settings:{dailyCount:10,reviewOn:true} };
 let store = load();
-function load(){ try{ const d=JSON.parse(localStorage.getItem(KEY)); return Object.assign({},DEF, d||{}, {stats:Object.assign({},DEF.stats,(d||{}).stats), attempts:Array.isArray((d||{}).attempts)?(d||{}).attempts:[], settings:Object.assign({},DEF.settings,(d||{}).settings)}); }catch(e){ return JSON.parse(JSON.stringify(DEF)); } }
-function save(){ localStorage.setItem(KEY, JSON.stringify(store)); }
+function isRecord(v){ return !!v && typeof v==='object' && !Array.isArray(v); }
+function finiteNonNegative(v,fallback=0){ const n=Number(v); return Number.isFinite(n)&&n>=0?n:fallback; }
+function normalizeStore(d, strict=false){
+  if(!isRecord(d)){ if(strict) throw new Error('备份根结构无效'); d={}; }
+  if(strict && (!isRecord(d.stats)||!isRecord(d.wrongs))) throw new Error('备份缺少有效的统计或错题数据');
+  const rawStats=isRecord(d.stats)?d.stats:{};
+  const byMod={};
+  if(isRecord(rawStats.byMod)) for(const [m,v] of Object.entries(rawStats.byMod)) if(isRecord(v)) byMod[m]={answered:finiteNonNegative(v.answered),correct:finiteNonNegative(v.correct)};
+  const stats={
+    answered:finiteNonNegative(rawStats.answered), correct:finiteNonNegative(rawStats.correct),
+    byMod, daily:Array.isArray(rawStats.daily)?rawStats.daily.filter(isRecord).slice(-60).map(v=>({date:/^\d{4}-\d{2}-\d{2}$/.test(String(v.date||''))?String(v.date):'',answered:finiteNonNegative(v.answered),correct:finiteNonNegative(v.correct)})):[]
+  };
+  const checkins={};
+  if(isRecord(d.checkins)) for(const [date,v] of Object.entries(d.checkins)) if(/^\d{4}-\d{2}-\d{2}$/.test(date)&&isRecord(v)) checkins[date]={answered:finiteNonNegative(v.answered),correct:finiteNonNegative(v.correct),dailyAnswered:finiteNonNegative(v.dailyAnswered),dailyCorrect:finiteNonNegative(v.dailyCorrect)};
+  const attempts=Array.isArray(d.attempts)?d.attempts.filter(isRecord).filter(a=>MODS.includes(a.mod)).slice(-ATT_LIMIT).map(a=>({t:finiteNonNegative(a.t),d:/^\d{4}-\d{2}-\d{2}$/.test(String(a.d||''))?String(a.d):'',qid:safeText(a.qid||''),mod:a.mod,ok:!!a.ok,src:safeText(a.src||''),point:safeText(a.point||''),rate:Number.isFinite(Number(a.rate))?Number(a.rate):null,dur:finiteNonNegative(a.dur),multi:!!a.multi,type:safeText(a.type||''),txn:safeText(a.txn||'')})):[];
+  return {
+    wrongs:isRecord(d.wrongs)?Object.fromEntries(Object.entries(d.wrongs).filter(([,w])=>isRecord(w)).map(([id,w])=>[id,{count:finiteNonNegative(w.count,1),mastered:!!w.mastered,lastWrong:/^\d{4}-\d{2}-\d{2}$/.test(String(w.lastWrong||''))?String(w.lastWrong):''}])):{},
+    checkins, stats,
+    favs:Array.isArray(d.favs)?d.favs.filter(x=>typeof x==='string').map(safeText):[],
+    customSl:Array.isArray(d.customSl)?d.customSl.filter(isRecord).map(s=>({cat:safeText(s.cat||'我的笔记'),title:safeText(s.title||''),body:safeText(s.body||''),custom:true})).filter(s=>s.title&&s.body):[],
+    pomo:{count:finiteNonNegative(d.pomo?.count),minutes:finiteNonNegative(d.pomo?.minutes)},
+    attempts,
+    settings:{dailyCount:Math.min(100,Math.max(1,Math.round(finiteNonNegative(d.settings?.dailyCount,DEF.settings.dailyCount)))),reviewOn:d.settings?.reviewOn!==false}
+  };
+}
+function load(){ try{ return normalizeStore(JSON.parse(localStorage.getItem(KEY))); }catch(e){ return JSON.parse(JSON.stringify(DEF)); } }
+function save(nextStore=store){
+  try{ localStorage.setItem(KEY, JSON.stringify(nextStore)); return true; }
+  catch(_){ toast('本地存储空间不足，请先导出备份并清理旧数据','error'); return false; }
+}
+
+/* ---------- 致泽学堂环境偏好（与学习备份相互独立） ---------- */
+const UI_PREF_KEY='zhize_ui_prefs_v1';
+const UI_SCENES=new Set(['mountains','lake','bamboo','cloud','plum','bridge','moon','lotus','paper','none']);
+function loadUiPrefs(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(UI_PREF_KEY)||'{}');
+    return {scene:UI_SCENES.has(raw.scene)?raw.scene:'mountains',ripple:raw.ripple!==false};
+  }catch(_){ return {scene:'mountains',ripple:true}; }
+}
+let uiPrefs=loadUiPrefs();
+function applyUiPrefs(){ document.documentElement.dataset.scene=uiPrefs.scene; }
+function persistUiPrefs(){
+  try{ localStorage.setItem(UI_PREF_KEY,JSON.stringify(uiPrefs)); return true; }
+  catch(_){ toast('显示偏好保存失败','error'); return false; }
+}
+function setUiScene(scene){
+  if(!UI_SCENES.has(scene)) return false;
+  uiPrefs={...uiPrefs,scene}; applyUiPrefs(); persistUiPrefs(); return true;
+}
+function setUiRipple(enabled){ uiPrefs={...uiPrefs,ripple:!!enabled}; persistUiPrefs(); return uiPrefs.ripple; }
 function allQuestions(){
   if(allQuestions._c) return allQuestions._c;   // 缓存题库展开结果
   allQuestions._c = MODS.flatMap(m=>QUESTION_BANK[m].map(q=>({...q,mod:m})));
@@ -99,7 +171,8 @@ window.addEventListener('sat:bank-retry',e=>{
 window.addEventListener('sat:bank-loaded',e=>{
   allQuestions._c=null; // 懒加载追加完成后使缓存失效
   bankProgressView(e.detail,'loaded');
-  if(typeof currentView==='function' && currentView()==='dashboard') renderDash();
+  const homeDraft=$('#ask-home');
+  if(typeof currentView==='function' && currentView()==='dashboard' && !homeDraft?.value.trim() && !document.activeElement?.closest?.('.ask-composer')) renderDash();
   const via=e.detail?.cacheHit?'（本地缓存）':'';
   toast(`完整题库已就绪${via}：${allQuestions().length.toLocaleString()} 题`,'ok');
 });
@@ -123,10 +196,9 @@ function debounce(fn, ms){
 }
 
 /* ---------- 逐题作答日志（C1：能力画像的数据层） ---------- */
-const ATT_LIMIT=3000;
 function qPointOf(q){ const m=(q.analysis||'').match(/考点：([^\n【】]+)/); return m? m[1].trim() : ''; }
 function qRateOf(q){ const m=(q.analysis||'').match(/正确率\s*([\d.]+)%/); return m? +m[1] : null; }
-function logAttempt(q, picked, correct, durSec){
+function logAttempt(target, q, picked, correct, durSec, txn=''){
   /* 每题一条：时间/模块/对错/来源/考点/难度(正确率代理)/用时/题型 */
   const att={
     t: Date.now(), d: today(), qid: q.id, mod: q.mod, ok: !!correct,
@@ -135,10 +207,10 @@ function logAttempt(q, picked, correct, durSec){
     rate: qRateOf(q),
     dur: durSec||0,
     multi: !!q.multi,
-    type: q.type||'',
+    type: q.type||'', txn,
   };
-  store.attempts.push(att);
-  if(store.attempts.length>ATT_LIMIT) store.attempts.splice(0, store.attempts.length-ATT_LIMIT);
+  target.attempts.push(att);
+  if(target.attempts.length>ATT_LIMIT) target.attempts.splice(0, target.attempts.length-ATT_LIMIT);
 }
 /* 能力画像聚合（attempts → 模块/考点/难度维度统计） */
 function abilityByMod(mod){
@@ -157,6 +229,15 @@ function weakPoints(mod, minN=2){
 /* 难度分档（正确率代理）：>=80 简单 / 60-80 中等 / 40-60 较难 / <40 困难 */
 function diffBand(rate){ if(rate==null) return '未知'; return rate>=80?'简单':rate>=60?'中等':rate>=40?'较难':'困难'; }
 const BANDS=['简单','中等','较难','困难'];
+function sourceBand(src){
+  const s=String(src||'');
+  if(s.includes('模考')) return '模考';
+  if(s.includes('国考')) return '国考真题';
+  if(s.includes('省考')||s.includes('联考')||s.includes('市考')) return '省考/联考真题';
+  if(s.includes('原创')) return '原创';
+  if(s.includes('精选')) return '精选';
+  return s?'其他':'未知';
+}
 
 /* ---------- C2 能力分析页 ---------- */
 function renderAnalysis(){
@@ -173,7 +254,7 @@ function renderAnalysis(){
   atts.forEach(a=>{ const b=diffBand(a.rate); if(byBand[b]){ byBand[b].a++; a.ok&&byBand[b].c++; } });
   // 来源维度
   const bySrc={};
-  atts.forEach(a=>{ const k=(a.src||'未知').replace(/·.+$/,''); (bySrc[k]=bySrc[k]||{a:0,c:0}); bySrc[k].a++; a.ok&&bySrc[k].c++; });
+  atts.forEach(a=>{ const k=sourceBand(a.src); (bySrc[k]=bySrc[k]||{a:0,c:0}); bySrc[k].a++; a.ok&&bySrc[k].c++; });
   // 用时分析（每题平均秒数，分对/错）
   const durOk=atts.filter(a=>a.ok&&a.dur>0).map(a=>a.dur), durBad=atts.filter(a=>!a.ok&&a.dur>0).map(a=>a.dur);
   const avg=arr=>arr.length? Math.round(arr.reduce((s,x)=>s+x,0)/arr.length) : 0;
@@ -224,20 +305,27 @@ function renderAnalysis(){
 }
 
 /* ---------- 数据操作 ---------- */
-function recordResult(q, picked, correct, durSec){
-  store.stats.answered++; correct && store.stats.correct++;
-  const bm = store.stats.byMod[q.mod] = store.stats.byMod[q.mod]||{answered:0,correct:0};
+function applyResult(target, q, picked, correct, durSec, context='practice', txn=''){
+  target.stats.answered++; correct && target.stats.correct++;
+  const bm = target.stats.byMod[q.mod] = target.stats.byMod[q.mod]||{answered:0,correct:0};
   bm.answered++; correct && bm.correct++;
   if(!correct){
-    const w = store.wrongs[q.id] = store.wrongs[q.id]||{count:0,mastered:false,lastWrong:''};
+    const w = target.wrongs[q.id] = target.wrongs[q.id]||{count:0,mastered:false,lastWrong:''};
     w.count++; w.mastered=false; w.lastWrong=today();
   }
-  store.checkins[today()] = store.checkins[today()]||{answered:0,correct:0};
-  store.checkins[today()].answered++; correct && store.checkins[today()].correct++;
-  const td=store.stats.daily; const last=td[td.length-1];
+  target.checkins[today()] = target.checkins[today()]||{answered:0,correct:0};
+  target.checkins[today()].answered++; correct && target.checkins[today()].correct++;
+  if(context==='daily'){
+    target.checkins[today()].dailyAnswered=(target.checkins[today()].dailyAnswered||0)+1;
+    if(correct) target.checkins[today()].dailyCorrect=(target.checkins[today()].dailyCorrect||0)+1;
+  }
+  const td=target.stats.daily; const last=td[td.length-1];
   if(last && last.date===today()){ last.answered++; correct&&last.correct++; } else td.push({date:today(),answered:1,correct:correct?1:0});
   if(td.length>60) td.shift();
-  logAttempt(q, picked, correct, durSec);   // C1 逐题日志
+  logAttempt(target, q, picked, correct, durSec, txn);
+}
+function recordResult(q, picked, correct, durSec, context='practice'){
+  applyResult(store, q, picked, correct, durSec, context);
   save();
 }
 function streakDays(){
@@ -248,32 +336,128 @@ function streakDays(){
   }
   return n;
 }
+function daySerial(value){
+  const d=value instanceof Date?value:null;
+  if(d) return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/86400000);
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value||''));
+  return m?Math.floor(Date.UTC(+m[1],+m[2]-1,+m[3])/86400000):NaN;
+}
 function reviewDue(){
   if(!store.settings.reviewOn) return [];
-  const days={1:1,2:2,3:4,4:7,5:15};
+  const dueDays=new Set([1,2,4,7,15]);
   const out=[];
   for(const qid in store.wrongs){
     const w=store.wrongs[qid]; if(w.mastered||!w.lastWrong) continue;
-    const gap=Math.floor((Date.now()-new Date(w.lastWrong).getTime())/86400000);
-    if(days[gap]===undefined) continue;
+    const gap=daySerial(new Date())-daySerial(w.lastWrong);
+    if(!dueDays.has(gap)) continue;
     const q=allQuestions().find(x=>x.id===qid);
-    if(q && (w.count<=5||gap>=7)) out.push(q);
+    if(q) out.push(q);
   }
   return out;
 }
 
 /* ---------- 视图路由 ---------- */
-const VIEWS=['dashboard','practice','daily','exam','wrongbook','shenlun','more'];
+const VIEWS=['dashboard','practice','daily','exam','wrongbook','shenlun','more','growth','ai','profile'];
+const ROUTE_SECTION={daily:'practice',exam:'practice',wrongbook:'practice',more:'profile'};
+let activeRoute='dashboard';
+let navigationEpoch=0;
 function switchTab(v){
+  const epoch=++navigationEpoch;
+  stopAskRecognizers();
   const needsBank=['practice','daily','exam','wrongbook'].includes(v);
-  if(needsBank && requireFullBank(()=>switchTab(v))) return;
-  VIEWS.forEach(x=>{ const el=$$(`.tab[data-view="${x}"]`)[0]; if(el) el.classList.toggle('active', x===v); });
-  renderView(v);
+  if(needsBank && requireFullBank(()=>{ if(epoch===navigationEpoch) switchTab(v); })) return;
+  activeRoute=VIEWS.includes(v)?v:'dashboard';
+  const section=ROUTE_SECTION[activeRoute]||activeRoute;
+  $$('.tab').forEach(el=>{ const active=el.dataset.view===section; el.classList.toggle('active',active); active?el.setAttribute('aria-current','page'):el.removeAttribute('aria-current'); });
+  renderView(activeRoute);
 }
 function renderView(v){
-  $('#streakBadge').innerHTML=`🔥 <b>${streakDays()}</b>天`;
-  const map={dashboard:renderDash,practice:renderPractice,daily:renderDaily,exam:renderExamConfig,wrongbook:renderWrong,shenlun:renderShenlun,more:renderMore};
-  $('#view').innerHTML=''; map[v](); window.scrollTo(0,0);
+  stopAskRecognizers();
+  $('#streakBadge').innerHTML=`连续学习 <b>${streakDays()}</b> 天`;
+  const map={dashboard:renderDash,practice:renderPractice,daily:renderDaily,exam:renderExamConfig,wrongbook:renderWrong,shenlun:renderShenlun,more:renderMore,growth:renderGrowth,ai:renderAi,profile:renderProfile};
+  $('#view').innerHTML=''; (map[v]||renderDash)(); window.scrollTo(0,0);
+}
+
+function renderGrowth(){
+  const due=reviewDue(), total=store.attempts.length, correct=store.attempts.filter(a=>a.ok).length;
+  $('#view').innerHTML=`<header class="page-heading"><span>修业成长</span><h1>看见趋势，也看见每一步</h1><p>致学力来自练习、稳定性、复习完成度与专注积累，不等同于考试分数。</p></header>
+  <section class="academy-grid">
+    <article class="card feature-card"><span class="feature-mark">析</span><h3>能力图谱</h3><p>基于 ${total} 次作答，梳理模块、考点、难度、来源和用时表现。</p><button class="btn primary" onclick="openGrowthTool('ability')">能力图谱</button></article>
+    <article class="card feature-card"><span class="feature-mark">温</span><h3>错题温习</h3><p>按 1 / 2 / 4 / 7 / 15 天节奏复习，今日到期 ${due.length} 题。</p><button class="btn" onclick="openGrowthTool('wrong')">错题温习</button></article>
+    <article class="card feature-card"><span class="feature-mark">静</span><h3>专注修习</h3><p>用番茄钟保持节奏，累计专注 ${store.pomo.minutes} 分钟。</p><button class="btn" onclick="openGrowthTool('focus')">专注修习</button></article>
+  </section>
+  <section class="card growth-summary"><h3><span class="dot"></span>当前修业小结</h3><div class="hero-stats"><div class="hs"><b>${total}</b><span>作答记录</span></div><div class="hs"><b>${total?Math.round(correct/total*100):0}%</b><span>近期正确率</span></div><div class="hs"><b>${streakDays()}</b><span>连续学习</span></div></div></section>`;
+}
+function openGrowthTool(tool){
+  if(tool==='ability') renderAnalysis();
+  else if(tool==='wrong') switchTab('wrongbook');
+  else renderMore();
+}
+function renderAi(){
+  $('#view').innerHTML=`<header class="page-heading"><span>问泽</span><h1>有依据地解释，有边界地建议</h1><p>问学于泽，明理而行。问泽是辅助层，不替代题库原始解析。</p></header>${renderAskComposer('ai')}<section class="academy-grid"><article class="card feature-card"><span class="feature-mark">解</span><h3>题目精讲</h3><p>围绕当前题目、你的答案和题库原始解析继续追问。</p></article><article class="card feature-card"><span class="feature-mark">策</span><h3>学习规划</h3><p>未来可根据目标和可用时间生成可修改的学习建议。</p></article><article class="card feature-card"><span class="feature-mark">录</span><h3>对话记录</h3><p>服务接入后再提供可查看、可删除的本地会话记录。</p></article></section>`;
+}
+const UI_SCENE_OPTIONS=[['mountains','远山'],['lake','烟水'],['bamboo','竹影'],['cloud','云水'],['plum','疏梅'],['bridge','柳桥'],['moon','月隐'],['lotus','清荷'],['paper','素宣'],['none','无背景']];
+function renderProfile(){
+  $('#view').innerHTML=`<header class="page-heading"><span>我的书斋</span><h1>学习数据，由你掌握</h1><p>数据、题库、显示偏好和隐私说明集中在这里。</p></header>
+  <section class="academy-grid profile-actions"><article class="card feature-card"><span class="feature-mark">存</span><h3>数据管理</h3><p>导出备份、导入恢复与清空学习数据。</p><button class="btn" onclick="renderMore()">数据管理</button></article><article class="card feature-card"><span class="feature-mark">库</span><h3>题库与缓存</h3><p>${bankCacheStatusText()}。</p><button class="btn" onclick="renderMore()">题库与缓存</button></article><article class="card feature-card"><span class="feature-mark">隐</span><h3>隐私与关于</h3><p>学习记录留在当前浏览器；服务未接入时，文字与转写结果不会发送给问泽。语音可能由浏览器的语音识别服务处理，并需你授权麦克风权限。</p><button class="btn" onclick="renderMore()">查看详情</button></article></section>
+  <section class="card display-settings"><div class="card-heading"><h3><span class="dot"></span>显示与无障碍</h3><span class="tag">即时生效</span></div><p class="muted mb10">选择一幅极淡古风背景；长题干和解析始终使用高不透明纸面保证可读。</p>
+    <div class="scene-grid">${UI_SCENE_OPTIONS.map(([id,name])=>`<button type="button" class="scene-choice ${uiPrefs.scene===id?'active':''}" aria-label="${name}" onclick="chooseUiScene('${id}',this)"><span class="scene-thumb scene-${id}"></span><span>${name}</span></button>`).join('')}</div>
+    <div class="list-row"><div><div class="l-title">点击涟漪</div><div class="l-sub">点击按钮时出现一次淡墨水纹；减少动态效果时自动停用。</div></div><button type="button" class="switch ${uiPrefs.ripple?'on':''}" aria-label="点击涟漪" aria-pressed="${uiPrefs.ripple?'true':'false'}" onclick="toggleUiRipple(this)"></button></div>
+    <div class="list-row"><div><div class="l-title">语音输入</div><div class="l-sub">首次点击时由浏览器请求权限；转写文字确认后才会发送。</div></div><span class="tag">按需授权</span></div>
+  </section>`;
+}
+function chooseUiScene(scene,button){ if(!setUiScene(scene)) return; $$('.scene-choice').forEach(x=>x.classList.toggle('active',x===button)); }
+function toggleUiRipple(button){ const enabled=setUiRipple(button.getAttribute('aria-pressed')!=='true'); button.setAttribute('aria-pressed',String(enabled)); button.classList.toggle('on',enabled); }
+
+const ASK_PROMPTS={home:['今天先练什么','为什么不能选 B','帮我安排 30 分钟复习'],ai:['分析我的薄弱项','制定今日学习计划','如何提高做题速度'],question:['为什么不能选 B','换个角度讲','总结这个考点']};
+function renderAskComposer(context='home'){
+  const prompts=ASK_PROMPTS[context]||ASK_PROMPTS.home;
+  return `<section class="card ask-composer" data-context="${context}" aria-labelledby="ask-${context}-title">
+    <div class="ask-head"><div><h3 id="ask-${context}-title">✦ 问泽</h3><p>先问清，再练透。可输入文字，也可口述问题。</p></div><span class="tag">尚未接入服务</span></div>
+    <div class="ask-chips">${prompts.map(p=>`<button type="button" class="ask-chip" onclick="fillAskPrompt('${context}','${inlineArg(p)}')">${esc(p)}</button>`).join('')}</div>
+    <div class="ask-row">
+      <button type="button" class="ask-mic" data-mic="${context}" aria-label="语音输入" aria-pressed="false" onclick="askMic('${context}')">◉</button>
+      <textarea id="ask-${context}" rows="2" aria-label="向问泽提问" placeholder="把不明白的地方说给问泽听……"></textarea>
+      <button type="button" class="ask-send" data-send="${context}" onclick="sendAsk('${context}')">发送</button>
+    </div>
+    <p class="ask-status" data-context="${context}" role="status">当前不会发送给问泽；语音识别由浏览器提供，使用前会请求权限。</p>
+  </section>`;
+}
+function fillAskPrompt(context,encoded){ const input=$(`#ask-${context}`); if(input){ input.value=decodeURIComponent(encoded); input.focus(); } }
+function sendAsk(context){
+  const input=$(`#ask-${context}`), status=$(`.ask-status[data-context="${context}"]`);
+  if(!input?.value.trim()){ if(status) status.textContent='请先输入想问的问题。'; input?.focus(); return; }
+  if(status) status.textContent='问泽服务尚未接入，问题不会发送；你的草稿已保留。';
+}
+const askRecognizers={};
+function stopAskRecognizers(){
+  Object.entries(askRecognizers).forEach(([context,rec])=>{
+    delete askRecognizers[context];
+    const mic=$(`[data-mic="${context}"]`);
+    mic?.classList.remove('recording');
+    mic?.setAttribute('aria-pressed','false');
+    rec.onstart=rec.onresult=rec.onerror=rec.onend=null;
+    try{ rec.stop(); }catch(_){}
+  });
+}
+function askMic(context){
+  const input=$(`#ask-${context}`), mic=$(`[data-mic="${context}"]`), status=$(`.ask-status[data-context="${context}"]`);
+  const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!input||!mic||!status) return;
+  if(!Recognition){ status.textContent='当前浏览器不支持语音识别，请继续使用文字输入。'; input.focus(); return; }
+  if(askRecognizers[context]){ askRecognizers[context].stop(); return; }
+  const rec=new Recognition(); askRecognizers[context]=rec; rec.lang='zh-CN'; rec.interimResults=false; rec.continuous=false;
+  rec.onstart=()=>{ mic.classList.add('recording'); mic.setAttribute('aria-pressed','true'); status.textContent='正在聆听…再次点击可停止。'; };
+  rec.onresult=e=>{ const text=String(e.results?.[0]?.[0]?.transcript||'').trim(); if(text) input.value=input.value.trim()?`${input.value.trim()} ${text}`:text; status.textContent='语音已转为文字，请确认或修改后再发送。'; };
+  rec.onerror=e=>{ status.textContent=e?.error==='not-allowed'?'麦克风权限被拒绝，请授权后重试或改用文字输入。':'没有识别成功，请重试或改用文字输入。'; };
+  rec.onend=()=>{ delete askRecognizers[context]; mic.classList.remove('recording'); mic.setAttribute('aria-pressed','false'); };
+  try{ rec.start(); }catch(_){ delete askRecognizers[context]; mic.setAttribute('aria-pressed','false'); status.textContent='语音输入暂时不可用，请改用文字输入。'; }
+}
+window.addEventListener('pagehide',stopAskRecognizers);
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) stopAskRecognizers(); });
+function renderQuestionAskBox(q,chosen){
+  const answer=chosen===undefined?'未作答':qAnsText(q,chosen);
+  return `<section class="question-ask" aria-label="问泽逐题讲解"><p class="question-context">当前题目 ✓ · 我的答案 ${esc(answer)} · 学习画像未使用</p>${renderAskComposer('question')}</section>`;
 }
 
 /* ============ 仪表盘 ============ */
@@ -284,7 +468,7 @@ function renderDash(){
   const V=$('#view');
   V.innerHTML=`
   <div class="hero">
-    <h1>上岸通 · 今日备考</h1>
+    <h1>致泽学堂 · 今日备考</h1>
     <div class="sub">${ci.answered? `今日已练 ${ci.answered} 题，正确 ${ci.correct} 题`:'今日还没开始，刷几题保持手感吧！'}</div>
     <div class="hero-stats">
       <div class="hs"><b>${store.stats.answered}</b><span>累计做题</span></div>
@@ -293,6 +477,7 @@ function renderDash(){
       <div class="hs"><b>${due.length}</b><span>今日待复习</span></div>
     </div>
   </div>
+  ${renderAskComposer('home')}
   <div class="grid-btns mb10">
     <button class="gb" onclick="quickStart('每日一练')"><span class="gi">📅</span><span class="gt">每日一练</span></button>
     <button class="gb" onclick="quickStart('随机刷题')"><span class="gi">🎲</span><span class="gt">随机刷题</span></button>
@@ -340,12 +525,14 @@ function quickStart(which){
   else if(which==='随机刷题') startQuiz(shuffle(allQuestions()).slice(0,10),'随机刷题 10 题');
   else if(which==='错题重练'){ const due=reviewDue(); const list=due.length?due:wrongList();
     startQuiz(shuffle(list),'错题重练 · '+(due.length?'待复习':'全部错题')+' '+list.length+'题'); }
-  else if(which==='模拟考试') renderExamConfig();
+  else if(which==='模拟考试') switchTab('exam');
 }
 
 /* ============ 刷题 ============ */
 function renderPractice(){
   $('#view').innerHTML=`
+  <header class="page-heading"><span>行测研习</span><h1>分门研习，及时温故</h1><p>专项练习、每日研习、模拟策试与错题温习统一归入行测。</p></header>
+  <div class="academy-grid practice-tools"><article class="card tool-card"><span>日课</span><h3>每日研习</h3><button class="btn" onclick="switchTab('daily')">每日研习</button></article><article class="card tool-card"><span>策试</span><h3>模拟策试</h3><button class="btn" onclick="switchTab('exam')">模拟策试</button></article><article class="card tool-card"><span>温故</span><h3>错题温习</h3><button class="btn" onclick="switchTab('wrongbook')">错题温习</button></article></div>
   <div class="card"><h3><span class="dot"></span>选择模块开始刷题</h3><div class="muted mb10">每模块 ${MODS.map(m=>`${m} ${QUESTION_BANK[m].length}题`).join(' · ')}</div>
     <div class="mod-list">
       ${MODS.map(m=>{const b=store.stats.byMod[m]||{answered:0,correct:0};const p=b.answered?Math.round(b.correct/b.answered*100):0;
@@ -364,16 +551,16 @@ function renderPractice(){
   <div class="card"><h3><span class="dot"></span>🔍 题库检索</h3>
     <div class="muted mb10">按关键词/考点/来源/正确率筛选全库 ${allQuestions().length.toLocaleString()} 题，支持练习与导出</div>
     <div class="search-grid">
-      <input id="searchKw" placeholder="关键词（题干/选项/解析）" oninput="searchDebounced()">
-      <input id="searchTag" placeholder="标签/来源关键字（如 北京 / 2023 / 第三季 / 行政执法）" oninput="searchDebounced()">
-      <input id="searchPoint" placeholder="考点关键词（如 逻辑推理/比重）" oninput="searchDebounced()">
-      <select id="searchSrc" onchange="doSearch()">
+      <input id="searchKw" aria-label="题干、选项或解析关键词" placeholder="关键词（题干/选项/解析）" oninput="searchDebounced()">
+      <input id="searchTag" aria-label="标签或来源关键词" placeholder="标签/来源关键字（如 北京 / 2023 / 第三季 / 行政执法）" oninput="searchDebounced()">
+      <input id="searchPoint" aria-label="考点关键词" placeholder="考点关键词（如 逻辑推理/比重）" oninput="searchDebounced()">
+      <select id="searchSrc" aria-label="题目来源" onchange="doSearch()">
         <option value="">全部来源</option><option>国考</option><option>省考</option><option>模考</option><option>原创</option><option>精选</option>
       </select>
-      <select id="searchMod" onchange="doSearch()">
+      <select id="searchMod" aria-label="题目模块" onchange="doSearch()">
         <option value="">全部模块</option>${MODS.map(m=>`<option>${m}</option>`).join('')}
       </select>
-      <select id="searchRate" onchange="doSearch()">
+      <select id="searchRate" aria-label="正确率范围" onchange="doSearch()">
         <option value="">正确率不限</option><option value="80">正确率 ≥80%</option><option value="60">正确率 60-80%</option><option value="0">正确率 &lt;60%</option>
       </select>
       <button class="btn" onclick="doSearch()">搜索</button>
@@ -507,12 +694,17 @@ function doSearch(){
   const show=list.slice(0,100);  // 分页：最多渲染100条
   $('#searchResults').innerHTML = list.length
     ? `<div class="muted" style="margin-bottom:8px">共 ${list.length} 题（点击任意题直接练习）</div>`+
-      show.map((q,i)=>`<div class="sr-item" onclick="startQuiz(shuffle(__lastSearch),'检索结果练习')">
+      show.map((q,i)=>`<button class="sr-item" onclick="startSearchResult(${i})">
         <span class="sr-no">${i+1}</span>
         <span class="sr-stem">${esc(q.stem.slice(0,60))}${q.stem.length>60?'…':''}</span>
         ${qTagHtml(q)}
-      </div>`).join('') + (list.length>100?`<div class="muted">…还有 ${list.length-100} 题，点击上方按钮直接练习全部</div>`:'')
+      </button>`).join('') + (list.length>100?`<div class="muted">…还有 ${list.length-100} 题，点击上方按钮直接练习全部</div>`:'')
     : '<div class="muted">没有匹配的题目，换个关键词试试</div>';
+}
+function startSearchResult(index){
+  const q=__lastSearch?.[index];
+  if(!q){ toast('该题已不在当前检索结果中','error'); return; }
+  startQuiz([q], `检索单题 · ${q.mod||''}`);
 }
 
 /* ---------- 导出 ---------- */
@@ -521,9 +713,9 @@ function exportFiltered(kind){
   if(!list.length){ toast('请先搜索出题目再导出'); return; }
   if(kind==='json'){
     const data={exported:new Date().toISOString(), count:list.length, questions:list.map(q=>({mod:q.mod,id:q.id,type:q.type,multi:q.multi||false,stem:q.stem,options:q.options,answer:q.multi?q.answer:('ABCD'[q.answer]),analysis:q.analysis,tag:q.tag,images:q.images||[],opt_images:q.opt_images||[]}))};
-    downloadFile('上岸通_检索导出_'+Date.now()+'.json', JSON.stringify(data,null,1), 'application/json');
+    downloadFile('致泽学堂_检索导出_'+Date.now()+'.json', JSON.stringify(data,null,1), 'application/json');
   } else {
-    let txt='上岸通题库导出（共'+list.length+'题）\n生成时间：'+new Date().toLocaleString()+'\n'+'='.repeat(40)+'\n\n';
+    let txt='致泽学堂题库导出（共'+list.length+'题）\n生成时间：'+new Date().toLocaleString()+'\n'+'='.repeat(40)+'\n\n';
     list.forEach((q,i)=>{
       txt+=`【${i+1}】[${q.mod}] ${q.type}${q.multi?'（多选）':''} ${qSource(q)}\n`;
       txt+=q.stem+'\n';
@@ -533,7 +725,7 @@ function exportFiltered(kind){
       if(qPoints(q)) txt+=`考点：${qPoints(q)}\n`;
       txt+=`解析：${q.analysis.replace(/【[^】]*】\n?/g,'')}\n\n${'-'.repeat(30)}\n\n`;
     });
-    downloadFile('上岸通_检索导出_'+Date.now()+'.txt', txt, 'text/plain;charset=utf-8');
+    downloadFile('致泽学堂_检索导出_'+Date.now()+'.txt', txt, 'text/plain;charset=utf-8');
   }
   toast('已导出 '+list.length+' 题');
 }
@@ -548,7 +740,8 @@ function printFiltered(){
   const list=__lastSearch||[];
   if(!list.length){ toast('请先搜索出题目再导出'); return; }
   const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${baseHref()}"><title>上岸通 · 题目与解析</title>
+  if(!w){ toast('浏览器拦截了打印窗口，请允许本站弹出窗口','error'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${baseHref()}"><title>致泽学堂 · 题目与解析</title>
   <style>body{font-family:'Microsoft YaHei',sans-serif;padding:24px;color:#222;max-width:820px;margin:0 auto}
   .q{margin-bottom:22px;padding-bottom:16px;border-bottom:1px dashed #ccc;page-break-inside:avoid}
   .no{font-weight:700;color:#3d7edb;margin-bottom:6px}.stem{margin-bottom:8px;line-height:1.7}
@@ -557,7 +750,7 @@ function printFiltered(){
   .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:8px;background:#eee;margin:0 4px 2px 0}
   img{max-width:100%}
   h1{color:#1b2a4a;text-align:center}@media print{.q{break-inside:avoid}}</style></head><body>
-  <h1>📘 上岸通 · 题目与解析（${list.length} 题）</h1>
+  <h1>📘 致泽学堂 · 题目与解析（${list.length} 题）</h1>
   <p style="text-align:center;color:#888">生成时间：${new Date().toLocaleString()}</p>
   ${list.map((q,i)=>`<div class="q"><div class="no">${i+1}. [${q.mod}] ${q.type}${q.multi?'（多选）':''}</div>
     <div style="margin:4px 0">${srcLineHtml(q)}</div>${qRate(q)?`<div class="tag" style="background:#fdf3e2;color:#e0962f">正确率 ${qRate(q)}%</div>`:''}${qPoints(q)?`<div class="tag" style="background:#fdeaea;color:#d96a4f">${esc(qPoints(q))}</div>`:''}
@@ -592,7 +785,7 @@ let __paperCfg = null;
 function renderCustomQuiz(){
   $('#view').innerHTML=`
   <div class="card"><h3><span class="dot"></span>🎯 自定义组卷</h3>
-    <div class="muted mb10">按各地国省考卷种结构智能组卷（上岸通特色）——可选完整模考卷或小卷子，在线答题或导出打印</div>
+    <div class="muted mb10">按各地国省考卷种结构智能组卷（致泽学堂特色）——可选完整模考卷或小卷子，在线答题或导出打印</div>
     <div class="field"><label>卷种模板（自动填充各模块题量，可改）</label>
       <select id="pcType" onchange="applyPaperCfg()">
         ${Object.keys(PAPER_CONFIGS).map(k=>`<option value="${k}">${k}（${PAPER_CONFIGS[k].total}题/${PAPER_CONFIGS[k].time}分钟）</option>`).join('')}
@@ -660,7 +853,7 @@ function timeStr(sec){ return Math.floor(sec/60)+'分'+(sec%60?sec%60+'秒':'');
 /* ---------- 打印卷注册 + 答案回填（打印→做题→回填判卷闭环） ---------- */
 const PAPER_KEY='shangan_papers_v1';
 function loadPapers(){ try{ return JSON.parse(localStorage.getItem(PAPER_KEY))||{}; }catch(e){ return {}; } }
-function savePapers(p){ try{ localStorage.setItem(PAPER_KEY, JSON.stringify(p)); }catch(e){ toast('本地存储已满，请先清理旧试卷'); } }
+function savePapers(p){ try{ localStorage.setItem(PAPER_KEY, JSON.stringify(p)); return true; }catch(e){ toast('本地存储已满，请先清理旧试卷'); return false; } }
 function registerPaper(title, qs){
   /* 导出 PDF 时注册一份卷，返回回填码；题目只存判卷所需的摘要 */
   const ps=loadPapers();
@@ -682,7 +875,7 @@ function renderFillback(){
   V.innerHTML=`
   <div class="card"><h3><span class="dot"></span>📥 答案回填</h3>
     <div class="muted mb10">打印了真题卷？做完后在答题卡上涂卡，回到这里输入卷面右上角的<b>回填码</b>，把答案逐题填进来——自动判卷、记录成绩与错题，与线上做题数据合并分析。</div>
-    <div class="field"><label>回填码（试卷右上角 🔑 处，如 SAT-20260817-1234）</label>
+    <div class="field"><label for="fbCode">回填码（试卷右上角 🔑 处，如 SAT-20260817-1234）</label>
       <input id="fbCode" placeholder="SAT-20260817-1234" onkeydown="if(event.key==='Enter')loadFillPaper()"></div>
     <button class="btn primary" onclick="loadFillPaper()">📖 载入试卷</button>
     <div id="fbBody"></div>
@@ -716,7 +909,7 @@ function loadFillPaper(id){
           <input data-q="${q.i}" value="${answers[q.i]||''}" placeholder="-" style="width:100%;text-align:center;border:1px solid var(--line);border-radius:8px;padding:4px;margin-top:2px;font-weight:700" oninput="saveFill('${code}')"></div>`).join('')}
       </div>
       <div class="btn-row">
-        <button class="btn primary" onclick="submitFill('${code}')">✅ 交卷判分</button>
+        <button class="btn primary" ${p.submittedAt?'disabled':''} onclick="submitFill('${code}')">${p.submittedAt?'✅ 已判分':'✅ 交卷判分'}</button>
         <button class="btn" onclick="renderFillback()">返回</button>
       </div>
       <div id="fbResult" class="mt12"></div>
@@ -727,38 +920,60 @@ function saveFill(code){
   $$('#fbBody input[data-q]').forEach(i=>{ if(i.value.trim()) vals[i.dataset.q]=i.value.trim().toUpperCase(); });
   try{ localStorage.setItem('shangan_fill_'+code, JSON.stringify(vals)); }catch(e){}
 }
-function submitFill(code){
-  const ps=loadPapers(); const p=ps[code];
+async function submitFill(code){
+  let ps=loadPapers(), p=ps[code];
   if(!p) return;
-  const vals=JSON.parse(localStorage.getItem('shangan_fill_'+code)||'{}');
+  if(p.submittedAt){ toast('该试卷已判分，成绩不会重复计入','ok'); return; }
+  if(window.ensureFullBank && !window.LAZY_BANK_STATUS?.loaded){
+    toast('正在加载完整题库，请稍候…');
+    try{ await window.ensureFullBank(); allQuestions._c=null; }
+    catch(_){ toast('完整题库加载失败，暂未交卷','error'); return; }
+    ps=loadPapers(); p=ps[code];
+    if(!p||p.submittedAt){ if(p?.submittedAt) toast('该试卷已判分，成绩不会重复计入','ok'); return; }
+  }
+  let vals={};
+  try{ vals=JSON.parse(localStorage.getItem('shangan_fill_'+code)||'{}'); }catch(_){ toast('回填答案读取失败','error'); return; }
   let filled=0, correct=0;
   const detail=p.qs.map(q=>{
-    const raw=(vals[q.i]||'').trim().toUpperCase();
+    const raw=String(vals[q.i]||'').trim().toUpperCase();
     if(!raw){ return {...q, filled:false}; }
     filled++;
-    // 归一化用户答案 → 下标/下标数组
     let userAns;
     if(q.multi){ userAns=raw.split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0).sort().join(','); }
     else { const idx='ABCD'.indexOf(raw); userAns=idx>=0? idx : -1; }
-    let ok=false;
-    if(q.multi){ ok = userAns===String(q.ans).split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0).sort().join(','); }
-    else { ok = userAns===q.ans; }
+    const ok=q.multi
+      ? userAns===String(q.ans).split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0).sort().join(',')
+      : userAns===q.ans;
     if(ok) correct++;
     return {...q, filled:true, ok, userRaw:raw};
   });
   if(!filled){ toast('至少填一题再交卷'); return; }
-  // 逐题记入学习数据（与线上做题同一套 recordResult 逻辑）
-  detail.forEach(d=>{
-    if(!d.filled) return;
-    const q=allQuestions().find(x=>x.id===d.id);
-    if(!q) return;
-    recordResult(q, d.multi? (d.userRaw.split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0)) : ('ABCD'.indexOf(d.userRaw)), d.ok);
-  });
+
+  const txnId=`fill:${code}`;
+  const alreadyApplied=store.attempts.some(a=>a.txn===txnId);
+  if(!alreadyApplied){
+    const draft=normalizeStore(JSON.parse(JSON.stringify(store)));
+    let applied=0;
+    detail.forEach(d=>{
+      if(!d.filled) return;
+      const q=allQuestions().find(x=>x.id===d.id);
+      if(!q) return;
+      const picked=d.multi?d.userRaw.split('').map(c=>'ABCD'.indexOf(c)).filter(x=>x>=0):'ABCD'.indexOf(d.userRaw);
+      applyResult(draft,q,picked,d.ok,0,'fill',txnId); applied++;
+    });
+    if(applied!==filled){ toast('完整题库中存在未找到的试卷题目，暂未交卷','error'); return; }
+    if(!save(draft)) return;
+    store=draft;
+  }
+
   const acc=Math.round(correct/filled*100);
-  // 按模块统计
+  p={...p,submittedAt:Date.now(),result:{filled,correct,acc}};
+  ps={...ps,[code]:p};
+  if(!savePapers(ps)) return;
   const byMod={};
   detail.filter(d=>d.filled).forEach(d=>{ byMod[d.mod]=byMod[d.mod]||{a:0,c:0}; byMod[d.mod].a++; d.ok&&byMod[d.mod].c++; });
-  $('#fbResult').innerHTML=`
+  const result=$('#fbResult');
+  if(result) result.innerHTML=`
     <div class="card" style="border:2px solid var(--green)">
       <h3>🎉 判卷完成：${correct}/${filled} 正确（${acc}%）</h3>
       <div class="muted mb10">成绩已并入学习数据（正确率、错题本、打卡、每日统计）。</div>
@@ -769,8 +984,6 @@ function submitFill(code){
         ${detail.map(d=>`<div style="padding:3px 0;border-bottom:1px dashed #eee">${d.i}. ${d.filled? (d.ok?'✅':'❌')+' '+d.userRaw : '— 未填'} <span class="muted">${esc(d.mod)}</span></div>`).join('')}
       </details>
     </div>`;
-  // 判完后删除试卷记录，释放空间
-  // 保留，用户可再回看；空间由 delPaper 管理
 }
 
 /* ---------- 真题卷格式 PDF 导出 v2（全真/练习双模式） ---------- */
@@ -799,8 +1012,8 @@ function cleanAnalysisText(an){
   return an.trim();
 }
 function printImg(url, alt){
-  if(!url) return '';
-  return `<img src="${url}" alt="${alt||'图'}" style="max-width:100%;max-height:280px;vertical-align:middle">`;
+  const safe=safeImageUrl(url); if(!safe) return '';
+  return `<img src="${esc(safe)}" alt="${esc(alt||'图')}" style="max-width:100%;max-height:280px;vertical-align:middle">`;
 }
 function printStemHtml(q){
   let s=esc(String(q.stem||''));
@@ -839,6 +1052,7 @@ function baseHref(){
 }
 function printPaper(qs){
   const w=window.open('','_blank');
+  if(!w){ toast('浏览器拦截了打印窗口，请允许本站弹出窗口','error'); return; }
   const cfgName=$('#pcType')?.value||'模拟卷';
   const fullReal=$('#pcFullReal')?.checked!==false;
   const now=new Date();
@@ -886,8 +1100,8 @@ function printPaper(qs){
   <div class="head">
     <h1>${cfgName}${fullReal?'·全真模拟卷':'·练习卷'}</h1>
     <div class="sub">《行政职业能力测验》 · 作答时限 ${paperMinutes} 分钟 · 满分 100 分</div>
-    <div class="sub">上岸通 智能组卷 · ${dateStr} · 共 ${qs.length} 题${fullReal?'':' · 练习模式（含来源标注）'}</div>
-    ${fullReal?`<div class="sub" style="color:#c0392b">🔑 答案回填码：<b>${paperId}</b>（做完后在上岸通「答案回填」输入此码，自动判卷并记录学习数据）</div>`:''}
+    <div class="sub">致泽学堂 智能组卷 · ${dateStr} · 共 ${qs.length} 题${fullReal?'':' · 练习模式（含来源标注）'}</div>
+    ${fullReal?`<div class="sub" style="color:#c0392b">🔑 答案回填码：<b>${paperId}</b>（做完后在致泽学堂「答案回填」输入此码，自动判卷并记录学习数据）</div>`:''}
   </div>
   <div class="notice"><b>注意事项</b>
   1. 本试卷为行测模拟题，请用 2B 铅笔在答题卡上作答，在题本上作答一律无效。<br>
@@ -913,10 +1127,10 @@ function printPaper(qs){
       return `<tr><td class="ahead" style="width:26px">${row+1}</td>${cols}</tr>`;
     }).join('')}
   </table>
-  <div class="foot">打印后可在上方涂卡；做完后用「上岸通 · 答案回填」扫码或拍照回填，自动判卷并记录个人数据</div></div>
+  <div class="foot">打印后可在上方涂卡；做完后用「致泽学堂 · 答案回填」扫码或拍照回填，自动判卷并记录个人数据</div></div>
   <div class="ans-page"><div class="part">📋 参考答案与解析（${qs.length} 题）</div>
   ${qs.map((q,i)=>`<div class="q"><b>${i+1}. ${q.mod} · ${q.type}</b> 答案：<b>${q.multi?q.answer:('ABCD'[q.answer])}</b>${qRate(q)?`（正确率 ${qRate(q)}%）`:''}${qPoints(q)?` · 考点：${esc(qPoints(q))}`:''}${fullReal?'':'<div style="font-size:10px;color:#8a6d3b">来源：'+esc(srcLine(q))+'</div>'}<div class="material" style="border:none;background:transparent;padding:4px 0 0">${esc(cleanAnalysisText(q.analysis))}</div></div>`).join('')}
-  <div class="foot">本卷由上岸通智能生成，仅供学习使用 · 解析版权归原题库方所有</div></div>
+  <div class="foot">本卷由致泽学堂智能生成，仅供学习使用 · 解析版权归原题库方所有</div></div>
   ${printWaitScript()}
   </body></html>`);
   w.document.close();
@@ -958,7 +1172,7 @@ function makeDaily(){
 function renderDaily(){
   const seed=Number(today().replace(/-/g,''));
   const qs=makeDaily(); const t=today(); const ci=store.checkins[t]||{};
-  const best = ci.answered? `${ci.correct}/${ci.answered}`:'未完成';
+  const best = ci.dailyAnswered? `${ci.dailyCorrect||0}/${ci.dailyAnswered}`:'未完成';
   $('#view').innerHTML=`
   <div class="card">
     <h3><span class="dot"></span>每日一练 · ${t}</h3>
@@ -968,12 +1182,13 @@ function renderDaily(){
       <span class="pill">今日成绩：${best}</span>
     </div>
   </div>
-  <div class="card"><h3><span class="dot"></span>本周打卡</h3><div class="cal-wrap"><div class="weekdays">${'一二三四五六日'.split('').map((w,i)=>`<span>${w}</span>`).join('')}</div><div class="cal-grid">${weekStrip()}</div></div></div>`;
+  <div class="card"><h3><span class="dot"></span>本周打卡</h3><div class="cal-wrap week-wrap"><div class="weekdays">${'一二三四五六日'.split('').map(w=>`<span>${w}</span>`).join('')}</div><div class="week-grid">${weekStrip()}</div></div></div>`;
 }
 function weekStrip(){
   const t=new Date(); const dow=(t.getDay()+6)%7; let html='';
-  for(let i=6;i>=0;i--){
-    const d=new Date(Date.now()-(dow+i)*86400000);
+  const monday=new Date(t); monday.setHours(12,0,0,0); monday.setDate(t.getDate()-dow);
+  for(let i=0;i<7;i++){
+    const d=new Date(monday); d.setDate(monday.getDate()+i);
     const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const done=!!store.checkins[key]; const isT=key===today();
     html+=`<div class="cal-cell ${done?'done':''} ${isT?'today':''}">${d.getDate()}</div>`;
@@ -987,13 +1202,13 @@ function renderExamConfig(){
   <div class="card"><h3><span class="dot"></span>模拟考试</h3>
     <div class="muted mb10">按真实国考题型结构组卷：常识/言语/数量/判断/资料 混合计时作答，交卷后出具成绩单。可自定义题量。</div>
     <div class="exam-config mt14">
-      <div class="ec" onclick="examQuick(20)"><b>20题</b><span>20分钟 · 快速自测</span></div>
-      <div class="ec" onclick="examQuick(35)"><b>35题</b><span>35分钟 · 半套</span></div>
-      <div class="ec" onclick="examQuick(50)"><b>50题</b><span>50分钟 · 标准套</span></div>
-      <div class="ec" onclick="renderExamCustom()"><b>自定义</b><span>自选题量/时间</span></div>
+      <button class="ec" onclick="examQuick(20)"><b>20题</b><span>20分钟 · 快速自测</span></button>
+      <button class="ec" onclick="examQuick(35)"><b>35题</b><span>35分钟 · 半套</span></button>
+      <button class="ec" onclick="examQuick(50)"><b>50题</b><span>50分钟 · 标准套</span></button>
+      <button class="ec" onclick="renderExamCustom()"><b>自定义</b><span>自选题量/时间</span></button>
     </div>
     <div class="btn-row">
-      <button class="btn gold" onclick="renderCustomQuiz()">🎯 卷种定制组卷（上岸通特色）</button>
+      <button class="btn gold" onclick="renderCustomQuiz()">🎯 卷种定制组卷（致泽学堂特色）</button>
     </div>
   </div>
   <div class="card"><h3><span class="dot"></span>模考技巧</h3><div class="muted">
@@ -1007,12 +1222,16 @@ function examQuick(n){ startQuiz(makeExam(n), `模拟考试 · ${n}题/${n}分�
 function renderExamCustom(){
   $('#view').innerHTML=`
   <div class="card"><h3><span class="dot"></span>自定义模考</h3>
-    <div class="field"><label>题目数量（10-70）</label><input id="exN" type="number" min="10" max="70" value="40"></div>
-    <div class="field"><label>考试时长（分钟）</label><input id="exT" type="number" min="5" max="150" value="40"></div>
+    <div class="field"><label for="exN">题目数量（10-70）</label><input id="exN" type="number" min="10" max="70" value="40"></div>
+    <div class="field"><label for="exT">考试时长（分钟）</label><input id="exT" type="number" min="5" max="150" value="40"></div>
     <button class="btn primary" onclick="examCustom()">开始考试</button>
   </div>`;
 }
-function examCustom(){ const n=+$('#exN').value, t=+$('#exT').value; startQuiz(makeExam(n), `模拟考试 · ${n}题/${t}分钟`, t*60); }
+function examCustom(){
+  const n=Number($('#exN').value), t=Number($('#exT').value);
+  if(!Number.isInteger(n)||n<10||n>70||!Number.isFinite(t)||t<5||t>150){ toast('请输入 10–70 题、5–150 分钟','error'); return; }
+  startQuiz(makeExam(n), `模拟考试 · ${n}题/${t}分钟`, t*60);
+}
 function makeExam(n){
   const ratio={常识判断:0.2,言语理解:0.3,数量关系:0.1,判断推理:0.25,资料分析:0.15};
   let out=[];
@@ -1059,25 +1278,27 @@ function renderShenlun(cat){
   const cur=cat||'全部';
   const items=[...SHENLUN_BANK.filter(s=>cur==='全部'||s.cat===cur), ...store.customSl.filter(s=>cur==='全部'||s.cat===cur)];
   $('#view').innerHTML=`
+  <header class="page-heading"><span>申论书房</span><h1>读材料，积素材，练表达</h1><p>金句、热点、案例与写作框架集中整理；学习数据仍保存在本地。</p></header>
   <div class="card"><h3><span class="dot"></span>申论素材库</h3>
     <div class="muted mb10">金句 · 热点 · 案例 · 框架，分类积累，考前冲刺背一背。</div>
     <div class="field"><input id="slSearch" placeholder="🔍 搜索素材关键词…" oninput="renderShenlunSearch()"></div>
-    <div class="sl-nav">${cats.map(c=>`<button class="chip ${c===cur?'active':''}" onclick="renderShenlun('${c}')">${c}</button>`).join('')}</div>
+    <div class="sl-nav">${cats.map(c=>`<button class="chip ${c===cur?'active':''}" aria-pressed="${c===cur?'true':'false'}" onclick="renderShenlun(decodeURIComponent('${inlineArg(c)}'))">${esc(c)}</button>`).join('')}</div>
   </div>
   <div id="slList">${shenlunItems(items)}</div>
   <div class="card"><h3><span class="dot"></span>添加自定义素材</h3>
-    <div class="field"><label>分类</label><select id="slCat"><option>名言金句</option><option>时政热点</option><option>案例素材</option><option>写作框架</option><option>应用文模板</option><option>我的笔记</option></select></div>
-    <div class="field"><label>标题</label><input id="slTitle" placeholder="如：基层减负素材"></div>
-    <div class="field"><label>内容</label><textarea id="slBody" rows="3" placeholder="输入素材内容…"></textarea></div>
+    <div class="field"><label for="slCat">分类</label><select id="slCat"><option>名言金句</option><option>时政热点</option><option>案例素材</option><option>写作框架</option><option>应用文模板</option><option>我的笔记</option></select></div>
+    <div class="field"><label for="slTitle">标题</label><input id="slTitle" placeholder="如：基层减负素材"></div>
+    <div class="field"><label for="slBody">内容</label><textarea id="slBody" rows="3" placeholder="输入素材内容…"></textarea></div>
     <button class="btn primary" onclick="addCustomSl()">保存素材</button>
   </div>`;
 }
 function shenlunItems(items){
   if(!items.length) return '<div class="empty"><span class="big">📭</span>暂无素材</div>';
   return items.map((s,i)=>{ const isFav=store.favs.includes(s.title);
-    return `<div class="sl-item ${isFav?'fav':''}"><div class="sl-title"><span>${esc(s.title)} <span class="tag">${s.cat}</span></span>
-    <span style="display:flex;gap:8px"><button class="star ${isFav?'on':''}" onclick="toggleFav('${esc(s.title)}')">★</button>
-    ${s.custom?`<button class="star" onclick="delCustomSl('${esc(s.title)}')">🗑</button>`:''}</span></div>
+    const arg=inlineArg(s.title);
+    return `<div class="sl-item ${isFav?'fav':''}"><div class="sl-title"><span>${esc(s.title)} <span class="tag">${esc(s.cat)}</span></span>
+    <span style="display:flex;gap:8px"><button class="star ${isFav?'on':''}" aria-label="${isFav?'取消收藏':'收藏'}：${esc(s.title)}" onclick="toggleFav(decodeURIComponent('${arg}'))">★</button>
+    ${s.custom?`<button class="star" aria-label="删除素材" onclick="delCustomSl(decodeURIComponent('${arg}'))">🗑</button>`:''}</span></div>
     <div class="sl-body">${esc(s.body)}</div></div>`;}).join('');
 }
 function renderShenlunSearch(){
@@ -1137,7 +1358,7 @@ function renderMore(){
   </div>
   <div class="card"><h3><span class="dot"></span>复习与提醒</h3>
     <div class="list-row"><div><div class="l-title">艾宾浩斯复习提醒</div><div class="l-sub">错题按 1/2/4/7/15 天提醒复习，今日 ${due.length} 题</div></div>
-    <div class="switch ${store.settings.reviewOn?'on':''}" onclick="toggleReview()"></div></div>
+    <button type="button" class="switch ${store.settings.reviewOn?'on':''}" aria-label="艾宾浩斯复习提醒" aria-pressed="${store.settings.reviewOn?'true':'false'}" onclick="toggleReview()"></button></div>
   </div>
   <div class="card"><h3><span class="dot"></span>📄 真题资源库（全网精选）</h3>
     <div class="muted mb10">以下为全网公开的历年真题与题库资源，点开即可使用：</div>
@@ -1175,12 +1396,12 @@ function renderMore(){
     <div class="muted mt8">数据保存在浏览器本地（localStorage），导出为 JSON 文件可随时恢复或迁移到其他设备。</div>
   </div>
   <div class="card"><h3><span class="dot"></span>关于</h3>
-    <div class="muted">上岸通 v2.2 — 考公一站式学习工具。纯前端、题库持久缓存、离线加速，题库与素材持续扩充中。祝你一战成公！🎉</div>
+    <div class="muted">致泽学堂 v2.4.0 — 公务员考试学习与成长平台。纯前端、题库持久缓存、离线加速，学习数据默认保存在当前浏览器。以学致知，以行泽民。</div>
   </div>`;
 }
 function heatmap(){
   const t=new Date(); const todayIdx=(t.getDay()+6)%7; const totalDays=16*7;
-  const start=new Date(Date.now()-(totalDays-1)*86400000);
+  const start=new Date(t); start.setHours(12,0,0,0); start.setDate(t.getDate()-todayIdx-(15*7));
   let html='';
   for(let week=0;week<16;week++){
     for(let d=0;d<7;d++){
@@ -1196,22 +1417,28 @@ function heatmap(){
 function exportData(){
   const blob=new Blob([JSON.stringify(store,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download=`上岸通备份_${today()}.json`; a.click();
+  a.download=`致泽学堂备份_${today()}.json`; a.click();
   toast('备份已导出 ✅','ok');
 }
 function importData(input){
   const f=input.files[0]; if(!f) return;
   const reader=new FileReader();
   reader.onload=e=>{ try{ const d=JSON.parse(e.target.result);
-    if(!d.stats||!d.wrongs) throw 0;
-    store=Object.assign({},DEF,d,{settings:Object.assign({},DEF.settings,d.settings)});
-    save(); toast('导入成功 ✅','ok'); renderView('more');
+    const nextStore=normalizeStore(d,true);
+    if(!save(nextStore)){ toast('导入失败：无法保存备份数据','error'); return; }
+    store=nextStore; toast('导入成功 ✅','ok'); renderView('more');
   }catch(err){ toast('备份文件格式不正确','error'); } };
   reader.readAsText(f);
 }
 function confirmReset(){
   if(confirm('确定清空全部学习数据吗？此操作不可恢复，建议先导出备份。')){
-    store=JSON.parse(JSON.stringify(DEF)); save(); renderView('more'); toast('已清空');
+    pomoReset();
+    store=JSON.parse(JSON.stringify(DEF));
+    localStorage.removeItem(PAPER_KEY);
+    const fillKeys=[];
+    for(let i=0;i<localStorage.length;i++){ const key=localStorage.key(i); if(key?.startsWith('shangan_fill_')) fillKeys.push(key); }
+    fillKeys.forEach(key=>localStorage.removeItem(key));
+    save(); renderView('more'); toast('学习数据、试卷和回填答案已清空');
   }
 }
 function toggleReview(){ store.settings.reviewOn=!store.settings.reviewOn; save(); renderMore(); }
@@ -1242,26 +1469,49 @@ function pomoToggle(){
   },1000); }
   pomoRender();
 }
-function pomoReset(){ pomo={running:false,work:true,left:25*60,timer:null,total:25*60}; pomoRender(); }
+function pomoReset(){ clearInterval(pomo.timer); pomo={running:false,work:true,left:25*60,timer:null,total:25*60}; pomoRender(); }
 
 /* ============ 答题引擎 ============ */
-let Q={list:[],idx:0,answers:{},marks:{},mode:'practice',start:0,limit:0,timer:null,elapsed:0,mods:[]};
+let Q={list:[],idx:0,answers:{},marks:{},mode:'practice',start:0,limit:0,deadline:0,timer:null,elapsed:0,mods:[],context:'practice'};
+let modalOrigin=null;
+function restoreModalFocus(){
+  const target=modalOrigin?.element?.isConnected?modalOrigin.element:(modalOrigin?.selector?$(modalOrigin.selector):null)||$('.tab[aria-current="page"]');
+  modalOrigin=null; target?.focus();
+}
+function modalBackground(open, restore=true){
+  ['.topbar','#view','.sidebar'].forEach(sel=>{ const el=$(sel); if(el) open?el.setAttribute('inert',''):el.removeAttribute('inert'); });
+  if(!open&&restore) restoreModalFocus();
+}
 function startQuiz(list,title,seconds){
-  Q={list,idx:0,answers:{},marks:{},mode:list.length>1?'multi':'single',start:Date.now(),limit:seconds||0,timer:null,elapsed:0};
+  if(!Array.isArray(list)||!list.length){ toast('当前没有可练习的题目，请先选择或搜索题目'); return false; }
+  clearInterval(Q.timer);
+  const origin=document.activeElement;
+  modalOrigin={element:origin,selector:origin?.matches?.('.tab[data-view]')?`.tab[data-view="${origin.dataset.view}"]`:(origin?.id?`#${origin.id}`:'')};
+  const start=Date.now(), limit=seconds||0;
+  Q={list,idx:0,answers:{},marks:{},mode:list.length>1?'multi':'single',start,limit,deadline:limit?start+limit*1000:0,timer:null,elapsed:0,context:String(title||'').startsWith('每日一练')?'daily':'practice'};
   $('#quizTitle').textContent=title;
   $('#resultLayer').classList.add('hidden');
   $('#quizLayer').classList.remove('hidden');
+  modalBackground(true);
+  $('#quizLayer').focus();
   document.body.style.overflow='hidden';
-  if(seconds){ Q.timer=setInterval(()=>{ Q.elapsed++; const left=seconds-Q.elapsed;
-    $('#quizTimer').textContent='⏱ '+fmtClock(Math.max(0,left));
-    if(left<=0){ clearInterval(Q.timer); Q.timer=null; finishQuiz(true); }
-  },1000); }
+  if(limit){ updateQuizTimer(); Q.timer=setInterval(updateQuizTimer,1000); }
   renderQ();
+  return true;
 }
 function fmtClock(sec){ return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`; }
+function updateQuizTimer(){
+  if(!Q.limit||!Q.deadline) return;
+  const now=Date.now();
+  Q.elapsed=Math.min(Q.limit,Math.max(0,Math.floor((now-Q.start)/1000)));
+  const left=Math.max(0,Math.ceil((Q.deadline-now)/1000));
+  $('#quizTimer').textContent='⏱ '+fmtClock(left);
+  if(now>=Q.deadline){ clearInterval(Q.timer); Q.timer=null; finishQuiz(true); }
+}
 function renderQ(){
+  stopAskRecognizers();
   const q=Q.list[Q.idx]; if(!q) return;
-  Q._qEnter=Date.now();   // C1: 记录本题进入时间（算用时）
+  if(Q._enteredQId!==q.id){ Q._enteredQId=q.id; Q._qEnter=Date.now(); }
   $('#quizProgress').textContent=`${Q.idx+1}/${Q.list.length}`;
   const chosen=Q.answers[q.id];
   const multi=!!q.multi;
@@ -1292,14 +1542,15 @@ function renderQ(){
       cls+=' multi-sel';
       mark='<span class="mark">✓</span>';
     }
-    return `<button class="${cls}" onclick="pick(${i})">
+    return `<button class="${cls}" ${answered?'disabled':''} onclick="pick(${i})">
       <span class="ol">${'ABCD'[i]}</span>${optTextHtml(q,i)}${mark}
       ${Q.marks[q.id]&&!answered?'<span class="marked-tag">⚑ 已标记</span>':''}
     </button>`;
   }).join('')}
   ${multi&&!answered? `<button class="btn primary" style="margin-top:14px" onclick="submitMulti()">✓ 确定选择（${sel.length} 项）</button>`:''}
   ${answered? `
-    <div class="q-analy"><b>💡 解析：</b>${esc(cleanAnalysisText(q.analysis))}</div>`:''}
+    <div class="q-analy original-analysis"><b>题库原始解析：</b>${esc(cleanAnalysisText(q.analysis))}</div>
+    ${renderQuestionAskBox(q,chosen)}`:''}
   `;
   updateFoot();
   if(Q.limit){ $('#quizTimer').textContent='⏱ '+fmtClock(Math.max(0,Q.limit-Q.elapsed)); }
@@ -1315,7 +1566,7 @@ function updateFoot(){
     $('#footMark').style.display='none';
     $('#footNext').textContent=isLast?'返回结果':'下一题';
     $('#footNext').className='btn primary';
-    $('#footNext').onclick=()=>{ if(isLast){ $('#quizLayer').classList.add('hidden'); document.body.style.overflow=''; $('#resultLayer').classList.remove('hidden'); } else { Q.idx++; renderReview(); } };
+    $('#footNext').onclick=()=>{ if(isLast){ $('#quizLayer').classList.add('hidden'); document.body.style.overflow=''; $('#resultLayer').classList.remove('hidden'); $('#resultLayer').focus(); } else { Q.idx++; renderReview(); } };
     return;
   }
   $('#footMark').style.display='';
@@ -1337,7 +1588,7 @@ function pick(i){
   }
   Q.answers[q.id]=i;
   const dur=Math.max(0, Math.round((Date.now()-(Q._qEnter||Date.now()))/1000));
-  recordResult(q,i,i===q.answer,dur);
+  recordResult(q,i,i===q.answer,dur,Q.context);
   renderQ();
 }
 function submitMulti(){
@@ -1348,21 +1599,24 @@ function submitMulti(){
   Q.answers[q.id]=sel;
   Q._multiSel=null;
   const dur=Math.max(0, Math.round((Date.now()-(Q._qEnter||Date.now()))/1000));
-  recordResult(q,sel,isCorrect(q,sel),dur);
+  recordResult(q,sel,isCorrect(q,sel),dur,Q.context);
   renderQ();
 }
 function nextQ(){ if(Q.idx<Q.list.length-1){ Q.idx++; Q._multiSel=null; renderQ(); } else finishQuiz(); }
 function prevQ(){ if(Q.idx>0){ Q.idx--; Q._multiSel=null; renderQ(); } }
 function markQ(){ const id=Q.list[Q.idx].id; if(Q.answers[id]!==undefined) return; Q.marks[id]=!Q.marks[id]; renderQ(); }
 function finishQuiz(forced){
+  stopAskRecognizers();
   clearInterval(Q.timer); Q.timer=null;
+  if(!Q.list.length) return;
+  Q.elapsed=Q.limit?Math.min(Q.limit,Math.max(0,Math.floor((Date.now()-Q.start)/1000))):Math.max(0,Math.round((Date.now()-Q.start)/1000));
   const total=Q.list.length;
   const answered=Object.keys(Q.answers).length;
   const correct=Q.list.filter(q=>isCorrect(q,Q.answers[q.id])).length;
   const unans=total-answered;
   $('#quizLayer').classList.add('hidden');
   document.body.style.overflow='';
-  const acc=answered?Math.round(correct/answered*100):0;
+  const acc=total?Math.round(correct/total*100):0;
   const mods={}; Q.list.forEach(q=>{ (mods[q.mod]=mods[q.mod]||{n:0,c:0}); mods[q.mod].n++; if(isCorrect(q,Q.answers[q.id])) mods[q.mod].c++; });
   const tips=acc>=90?'状态极佳，保持！':acc>=75?'发挥稳定，查漏补缺更上一层楼':acc>=60?'基础尚可，错题本多复习': '别灰心，错题就是提分空间，复习后再来！';
   $('#resultBox').innerHTML=`
@@ -1381,6 +1635,7 @@ function finishQuiz(forced){
       <button class="btn" onclick="closeResult()">完成</button>
     </div>`;
   $('#resultLayer').classList.remove('hidden');
+  $('#resultLayer').focus();
 }
 function reviewQuiz(){
   $('#resultLayer').classList.add('hidden');
@@ -1389,8 +1644,10 @@ function reviewQuiz(){
   $('#quizLayer').classList.remove('hidden');
   document.body.style.overflow='hidden';
   renderReview();
+  $('#quizLayer').focus();
 }
 function renderReview(){
+  stopAskRecognizers();
   const q=Q.list[Q.idx];
   $('#quizProgress').textContent=`${Q.idx+1}/${Q.list.length}`;
   const chosen=Q.answers[q.id];
@@ -1417,7 +1674,8 @@ function renderReview(){
       <span class="ol">${'ABCD'[i]}</span>${optTextHtml(q,i)}${mark}
     </div>`;
   }).join('')}
-  <div class="q-analy"><b>💡 解析：</b>${esc(cleanAnalysisText(q.analysis))}<br><span class="muted">你${chosen!==undefined? '选了 '+qAnsText(q,chosen)+(isCorrect(q,chosen)?'，回答正确':'，回答错误'):'未作答'} · 正确答案 ${qAnsText(q,q.answer)}</span></div>`;
+  <div class="q-analy original-analysis"><b>题库原始解析：</b>${esc(cleanAnalysisText(q.analysis))}<br><span class="muted">你${chosen!==undefined? '选了 '+qAnsText(q,chosen)+(isCorrect(q,chosen)?'，回答正确':'，回答错误'):'未作答'} · 正确答案 ${qAnsText(q,q.answer)}</span></div>
+  ${renderQuestionAskBox(q,chosen)}`;
   updateFoot();
 }
 function reviewNav(dir){ Q.idx+=dir; if(Q.idx<0)Q.idx=0; if(Q.idx>=Q.list.length)Q.idx=Q.list.length-1; renderReview(); }
@@ -1433,15 +1691,24 @@ $('#quizClose').onclick=function(){
   clearInterval(Q.timer);
   const answering=Q.mode!=='review'&&Object.keys(Q.answers).length<Q.list.length;
   if(answering&&!confirm('还有题目未作答，确定退出？')) return;
-  $('#quizLayer').classList.add('hidden'); document.body.style.overflow='';
+  stopAskRecognizers();
+  $('#quizLayer').classList.add('hidden'); document.body.style.overflow=''; modalBackground(false);
 };
 
-/* 底部导航 */
+/* 主导航与轻量古风交互 */
 $$('.tab').forEach(t=>t.onclick=()=>switchTab(t.dataset.view));
+$$('[data-open-view]').forEach(t=>t.onclick=()=>switchTab(t.dataset.openView));
+document.addEventListener('pointerdown',e=>{
+  if(!uiPrefs.ripple||e.button!==0||matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if(!e.target.closest('button,a,.btn')||e.target.closest('input,textarea,select,[contenteditable="true"]')) return;
+  const wave=document.createElement('span'); wave.className='ink-ripple';
+  wave.style.left=`${e.clientX}px`; wave.style.top=`${e.clientY}px`; document.body.appendChild(wave);
+  wave.addEventListener('animationend',()=>wave.remove(),{once:true});
+});
 
 /* 初始化 */
-window.closeResult=()=>{ $('#resultLayer').classList.add('hidden'); renderView(currentView()); };
-function currentView(){ const a=$('.tab.active'); return a?a.dataset.view:'dashboard'; }
+window.closeResult=()=>{ $('#resultLayer').classList.add('hidden'); modalBackground(false,false); renderView(currentView()); restoreModalFocus(); };
+function currentView(){ return activeRoute; }
 window.pick=pick; window.nextQ=nextQ; window.prevQ=prevQ; window.markQ=markQ;
 window.startQuiz=startQuiz; window.quickStart=quickStart; window.markMastered=markMastered;
 window.renderShenlun=renderShenlun; window.renderShenlunSearch=renderShenlunSearch;
@@ -1453,10 +1720,14 @@ window.buildPaper=buildPaper; window.buildPaperAndPrint=buildPaperAndPrint; wind
 window.renderFillback=renderFillback; window.loadFillPaper=loadFillPaper; window.delPaper=delPaper;
 window.saveFill=saveFill; window.submitFill=submitFill; window.registerPaper=registerPaper;
 window.renderAnalysis=renderAnalysis; window.smartQuiz=smartQuiz;
-window.doSearch=doSearch; window.searchDebounced=searchDebounced; window.exportFiltered=exportFiltered; window.printFiltered=printFiltered;
+window.doSearch=doSearch; window.searchDebounced=searchDebounced; window.startSearchResult=startSearchResult; window.exportFiltered=exportFiltered; window.printFiltered=printFiltered;
 window.exportData=exportData; window.importData=importData; window.confirmReset=confirmReset; window.clearBankCache=clearBankCache;
-window.openUrl=(u)=>{ window.open(u,'_blank'); };
+window.openUrl=(u)=>{ window.open(u,'_blank','noopener,noreferrer'); };
 window.toggleReview=toggleReview; window.pomoToggle=pomoToggle; window.pomoReset=pomoReset;
 window.reviewQuiz=reviewQuiz; window.reviewNav=reviewNav; window.closeResult=closeResult;
+window.setUiScene=setUiScene; window.setUiRipple=setUiRipple;
+window.fillAskPrompt=fillAskPrompt; window.sendAsk=sendAsk; window.askMic=askMic;
+window.openGrowthTool=openGrowthTool; window.chooseUiScene=chooseUiScene; window.toggleUiRipple=toggleUiRipple;
+applyUiPrefs();
 pomoRender();
-renderDash();
+switchTab('dashboard');

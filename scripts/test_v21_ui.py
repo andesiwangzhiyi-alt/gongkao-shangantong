@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """上岸通 v2.1 前端定向验收：多来源、搜索、图片打印、移动端布局。"""
+import os
 import time
 from playwright.sync_api import sync_playwright
 
-URL='http://127.0.0.1:8124/index.html'
+URL=os.environ.get('SAT_TEST_URL', 'http://127.0.0.1:8124/index.html')
 CHROME=r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 fails=[]
 def check(name, ok, detail=''):
